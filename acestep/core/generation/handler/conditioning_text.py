@@ -63,9 +63,17 @@ class ConditioningTextMixin:
         parsed_metas: List[str],
         vocal_languages: List[str],
         audio_cover_strength: float,
+        global_captions: Optional[List[str]] = None,
     ) -> Tuple[List[str], torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
         """Tokenize caption/lyric prompts and optional non-cover branch prompts."""
         actual_captions, actual_languages = self._extract_caption_and_language(parsed_metas, captions, vocal_languages)
+
+        # Detect is_lego_sft from the loaded model config (set on the SFT-stems checkpoint).
+        is_lego_sft = (
+            hasattr(self, "model")
+            and self.model is not None
+            and getattr(self.model.config, "is_lego_sft", False)
+        )
 
         text_inputs = []
         text_token_idss = []
@@ -80,13 +88,22 @@ class ConditioningTextMixin:
             actual_caption = actual_captions[i]
             actual_language = actual_languages[i]
 
-            # SFT-stems lego: wrap caption to match training-time prompt format.
-            # During training, the caption block is always formatted as:
-            #   "Local: {caption}\nMask Control: true"
-            # Detect lego tasks by their instruction pattern.
-            if "based on the audio context" in instruction.lower():
-                if not actual_caption.startswith("Local:"):
-                    actual_caption = f"Local: {actual_caption}\nMask Control: true"
+            # SFT-stems lego: build the training-compatible caption block.
+            # Training format (full mode):
+            #   "Global: {global_caption}\nLocal: {local_caption}\nMask Control: true"
+            # Training format (when no global):
+            #   "Local: {local_caption}\nMask Control: true"
+            # The user passes:
+            #   - captions[i]        → local/per-track description
+            #   - global_captions[i] → global/full-song description (optional)
+            if is_lego_sft and "based on the audio context" in instruction.lower():
+                local_cap = actual_caption
+                global_cap = (global_captions[i] if global_captions and i < len(global_captions) else "") or ""
+                if not local_cap.startswith("Local:"):
+                    if global_cap:
+                        actual_caption = f"Global: {global_cap}\nLocal: {local_cap}\nMask Control: true"
+                    else:
+                        actual_caption = f"Local: {local_cap}\nMask Control: true"
 
             text_prompt = SFT_GEN_PROMPT.format(instruction, actual_caption, parsed_metas[i])
 

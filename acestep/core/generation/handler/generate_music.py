@@ -94,7 +94,8 @@ class GenerateMusicMixin:
     def generate_music(
         self,
         captions: str,
-        lyrics: str,
+        global_caption: str = "",
+        lyrics: str = "",
         bpm: Optional[int] = None,
         key_scale: str = "",
         time_signature: str = "",
@@ -195,6 +196,7 @@ class GenerateMusicMixin:
                 processed_src_audio=processed_src_audio,
                 audio_duration=audio_duration,
                 captions=captions,
+                global_caption=global_caption,
                 lyrics=lyrics,
                 vocal_language=vocal_language,
                 instruction=instruction,
