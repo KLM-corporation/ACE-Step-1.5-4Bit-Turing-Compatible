@@ -97,6 +97,33 @@ class LlmInitializeBackendCompatTests(unittest.TestCase):
         self.assertIn("Backend: PyTorch", status)
         self.assertIn("vLLM backend is unavailable on Windows", status)
 
+    @patch("acestep.llm_inference.AutoModelForCausalLM.from_pretrained")
+    def test_load_pytorch_model_uses_readable_status_markers(
+        self,
+        mock_from_pretrained: MagicMock,
+    ) -> None:
+        """PyTorch LM status strings should use readable ASCII markers."""
+        handler = LLMHandler()
+        mock_model = MagicMock()
+        mock_model.to.return_value = mock_model
+        mock_model.eval.return_value = None
+        mock_from_pretrained.return_value = mock_model
+        handler.dtype = "float16"
+        handler.offload_to_cpu = False
+
+        ok, status = handler._load_pytorch_model("C:/repo/checkpoints/model", "cuda")
+
+        self.assertTrue(ok)
+        self.assertIn("[OK] 5Hz LM initialized successfully", status)
+        self.assertTrue(status.isascii())
+
+        mock_from_pretrained.side_effect = RuntimeError("boom")
+        ok, status = handler._load_pytorch_model("C:/repo/checkpoints/model", "cuda")
+
+        self.assertFalse(ok)
+        self.assertIn("[ERROR] Error initializing 5Hz LM", status)
+        self.assertTrue(status.isascii())
+
 
 if __name__ == "__main__":
     unittest.main()
