@@ -48,7 +48,8 @@ def register_generation_mode_handlers(
 
     # Shared handler for mode-change and initial page load — extracted to
     # avoid duplicating the lambda and to keep both call sites in sync.
-    def _handle_mode_change(mode, prev):
+    def _handle_mode_change(mode: str, prev: str | None):
+        """Proxy mode-change handling for both .change() and .load() events."""
         return gen_h.handle_generation_mode_change(mode, prev, llm_handler)
 
     mode_change_inputs = [
