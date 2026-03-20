@@ -72,7 +72,7 @@ void PluginPreview::clear()
     transportSource_.stop();
     transportSource_.setSource(nullptr);
     readerSource_.reset();
-    currentFile_ = {};
+    currentFile_ = juce::File();
 }
 
 void PluginPreview::play()

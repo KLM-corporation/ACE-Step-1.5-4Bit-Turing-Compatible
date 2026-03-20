@@ -116,7 +116,7 @@ void ACEStepVST3AudioProcessor::getStateInformation(juce::MemoryBlock& destData)
 
 void ACEStepVST3AudioProcessor::setStateInformation(const void* data, int sizeInBytes)
 {
-    std::unique_ptr<juce::XmlElement> xml(juce::getXmlFromBinary(data, sizeInBytes));
+    std::unique_ptr<juce::XmlElement> xml(getXmlFromBinary(data, sizeInBytes));
     if (xml != nullptr)
     {
         if (auto parsedState = parseStateXml(*xml))
