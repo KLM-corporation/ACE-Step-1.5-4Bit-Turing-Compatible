@@ -4,6 +4,41 @@
 
 namespace acestep::vst3
 {
+namespace
+{
+juce::String deriveSessionName(const PluginState& state)
+{
+    const auto prompt = state.prompt.trim();
+    if (prompt.isEmpty())
+    {
+        return "Untitled Session";
+    }
+
+    return prompt.substring(0, 48);
+}
+
+void mirrorTakeIntoLegacyFields(PluginState& state, int slotIndex)
+{
+    const auto index = static_cast<size_t>(slotIndex);
+    const auto& take = state.resultTakes[index];
+    state.resultSlots[index] = take.slotLabel;
+    state.resultFileUrls[index] = take.remoteFileUrl;
+    state.resultLocalPaths[index] = take.localFilePath;
+}
+
+void refreshSessionFlags(PluginState& state)
+{
+    const auto busy = state.transportState == TransportState::submitting
+                      || state.transportState == TransportState::queued
+                      || state.transportState == TransportState::rendering;
+    state.session.canCancelActiveTask = busy;
+    if (state.session.sessionName.isEmpty())
+    {
+        state.session.sessionName = deriveSessionName(state);
+    }
+}
+}  // namespace
+
 ACEStepVST3AudioProcessor::ACEStepVST3AudioProcessor()
     : juce::AudioProcessor(
           BusesProperties().withOutput("Output", juce::AudioChannelSet::stereo(), true))
@@ -149,6 +184,7 @@ bool ACEStepVST3AudioProcessor::loadPreviewFile(const juce::File& file)
     state_.previewFilePath = file.getFullPathName();
     state_.previewDisplayName = file.getFileName();
     state_.errorMessage = {};
+    state_.session.lastCompletedSlot = state_.selectedResultSlot;
     return true;
 }
 
@@ -197,23 +233,32 @@ void ACEStepVST3AudioProcessor::requestGeneration()
     if (state_.prompt.trim().isEmpty())
     {
         state_.jobStatus = JobStatus::failed;
+        state_.transportState = TransportState::failed;
         state_.progressText = {};
         state_.errorMessage = "Prompt is required before generation.";
+        refreshSessionFlags(state_);
         return;
     }
 
     clearGeneratedResults();
     stopPreview();
     clearPreviewFile();
+    state_.workflowMode = WorkflowMode::text;
+    state_.session.sessionName = deriveSessionName(state_);
     state_.jobStatus = JobStatus::submitting;
+    state_.transportState = TransportState::submitting;
     state_.progressText = "Submitting request...";
     state_.errorMessage = {};
+    refreshSessionFlags(state_);
 }
 
 void ACEStepVST3AudioProcessor::selectResultSlot(int index)
 {
     state_.selectedResultSlot = juce::jlimit(0, kResultSlotCount - 1, index);
-    const auto& localPath = state_.resultLocalPaths[static_cast<size_t>(state_.selectedResultSlot)];
+    const auto& take = state_.resultTakes[static_cast<size_t>(state_.selectedResultSlot)];
+    const auto& localPath = take.localFilePath.isNotEmpty()
+                                ? take.localFilePath
+                                : state_.resultLocalPaths[static_cast<size_t>(state_.selectedResultSlot)];
     if (localPath.isNotEmpty())
     {
         [[maybe_unused]] const auto loaded = loadPreviewFile(juce::File(localPath));
@@ -374,48 +419,81 @@ void ACEStepVST3AudioProcessor::applyCompletedTask(const BackendTaskResult& task
             {
                 state_.errorMessage = taskResult.health.errorMessage;
             }
+            refreshSessionFlags(state_);
             return;
         case BackendTaskKind::submitGeneration:
             if (!taskResult.generationStart.succeeded)
             {
                 state_.jobStatus = JobStatus::failed;
+                state_.transportState = TransportState::failed;
                 state_.progressText = {};
                 state_.errorMessage = taskResult.generationStart.errorMessage;
                 state_.currentTaskId = {};
+                refreshSessionFlags(state_);
                 return;
             }
 
             state_.backendStatus = BackendStatus::ready;
             state_.jobStatus = JobStatus::queuedOrRunning;
+            state_.transportState = TransportState::queued;
             state_.currentTaskId = taskResult.generationStart.taskId;
             state_.progressText = "Task started: " + state_.currentTaskId;
             state_.errorMessage = {};
+            refreshSessionFlags(state_);
             return;
         case BackendTaskKind::pollGeneration:
+        {
             state_.jobStatus = taskResult.generationPoll.status;
             state_.progressText = taskResult.generationPoll.progressText;
             if (taskResult.generationPoll.status == JobStatus::failed)
             {
+                state_.transportState = TransportState::failed;
                 state_.errorMessage = taskResult.generationPoll.errorMessage;
                 state_.currentTaskId = {};
+                refreshSessionFlags(state_);
                 return;
             }
 
             if (taskResult.generationPoll.status != JobStatus::succeeded)
             {
+                state_.transportState = state_.progressText.isEmpty() ? TransportState::queued
+                                                                     : TransportState::rendering;
+                refreshSessionFlags(state_);
                 return;
             }
 
+            const auto compareGroup = state_.currentTaskId;
             state_.currentTaskId = {};
             state_.errorMessage = {};
+            auto readyTakeCount = 0;
             for (int index = 0; index < kResultSlotCount; ++index)
             {
                 const auto& slot = taskResult.generationPoll.resultSlots[static_cast<size_t>(index)];
-                state_.resultSlots[static_cast<size_t>(index)] = slot.label;
-                state_.resultFileUrls[static_cast<size_t>(index)] = slot.remoteFileUrl;
+                auto& take = state_.resultTakes[static_cast<size_t>(index)];
+                take.slotLabel = slot.label;
+                take.remoteFileUrl = slot.remoteFileUrl;
+                take.localFilePath = {};
+                take.statusText = "Rendered";
+                take.compareGroup = compareGroup;
+                take.seed = state_.seed;
+                take.durationSeconds = state_.durationSeconds;
+                take.modelPreset = state_.modelPreset;
+                take.qualityMode = state_.qualityMode;
+                take.updatedAtMs = juce::Time::currentTimeMillis();
+                take.readyForCompare = slot.remoteFileUrl.isNotEmpty();
+                if (take.readyForCompare)
+                {
+                    ++readyTakeCount;
+                }
+                mirrorTakeIntoLegacyFields(state_, index);
             }
             state_.selectedResultSlot = 0;
-            if (state_.resultFileUrls[0].isNotEmpty())
+            state_.session.lastCompletedSlot = 0;
+            state_.session.comparePrimarySlot = readyTakeCount > 1 ? 0 : -1;
+            state_.session.compareSecondarySlot = readyTakeCount > 1 ? 1 : -1;
+            state_.transportState = readyTakeCount > 1 ? TransportState::compareReady
+                                                       : TransportState::succeeded;
+            if (state_.resultTakes[0].remoteFileUrl.isNotEmpty())
             {
                 pendingPreviewDownloadSlot_ = 0;
             }
@@ -423,8 +501,11 @@ void ACEStepVST3AudioProcessor::applyCompletedTask(const BackendTaskResult& task
             {
                 state_.errorMessage = "Task finished but no audio file was returned.";
             }
+            refreshSessionFlags(state_);
             return;
+        }
         case BackendTaskKind::downloadPreview:
+        {
             if (!taskResult.previewDownload.succeeded)
             {
                 state_.errorMessage = taskResult.previewDownload.errorMessage;
@@ -435,14 +516,20 @@ void ACEStepVST3AudioProcessor::applyCompletedTask(const BackendTaskResult& task
                 && taskResult.previewDownload.slotIndex < kResultSlotCount)
             {
                 const auto slotIndex = static_cast<size_t>(taskResult.previewDownload.slotIndex);
-                state_.resultLocalPaths[slotIndex] = taskResult.previewDownload.localFilePath;
+                auto& take = state_.resultTakes[slotIndex];
+                take.localFilePath = taskResult.previewDownload.localFilePath;
+                take.statusText = "Preview cached";
+                take.updatedAtMs = juce::Time::currentTimeMillis();
+                mirrorTakeIntoLegacyFields(state_, taskResult.previewDownload.slotIndex);
                 if (state_.selectedResultSlot == taskResult.previewDownload.slotIndex)
                 {
                     [[maybe_unused]] const auto loaded =
                         loadPreviewFile(juce::File(taskResult.previewDownload.localFilePath));
                 }
             }
+            refreshSessionFlags(state_);
             return;
+        }
         case BackendTaskKind::none:
             return;
     }
@@ -452,14 +539,18 @@ void ACEStepVST3AudioProcessor::clearGeneratedResults()
 {
     state_.currentTaskId = {};
     state_.progressText = {};
+    state_.transportState = TransportState::idle;
     state_.selectedResultSlot = 0;
+    state_.session.lastCompletedSlot = -1;
+    state_.session.comparePrimarySlot = -1;
+    state_.session.compareSecondarySlot = -1;
     pendingPreviewDownloadSlot_.reset();
     for (int index = 0; index < kResultSlotCount; ++index)
     {
-        state_.resultSlots[static_cast<size_t>(index)] = {};
-        state_.resultFileUrls[static_cast<size_t>(index)] = {};
-        state_.resultLocalPaths[static_cast<size_t>(index)] = {};
+        state_.resultTakes[static_cast<size_t>(index)] = {};
+        mirrorTakeIntoLegacyFields(state_, index);
     }
+    refreshSessionFlags(state_);
 }
 
 void ACEStepVST3AudioProcessor::syncPreviewFromState()

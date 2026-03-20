@@ -44,6 +44,29 @@ juce::String toString(JobStatus status)
     return "Idle";
 }
 
+juce::String toString(TransportState state)
+{
+    switch (state)
+    {
+        case TransportState::idle:
+            return "Idle";
+        case TransportState::submitting:
+            return "Submitting";
+        case TransportState::queued:
+            return "Queued";
+        case TransportState::rendering:
+            return "Rendering";
+        case TransportState::succeeded:
+            return "Succeeded";
+        case TransportState::failed:
+            return "Failed";
+        case TransportState::compareReady:
+            return "Compare Ready";
+    }
+
+    return "Idle";
+}
+
 juce::String toString(ModelPreset preset)
 {
     switch (preset)
@@ -72,6 +95,23 @@ juce::String toString(QualityMode mode)
     }
 
     return "Balanced";
+}
+
+juce::String toString(WorkflowMode mode)
+{
+    switch (mode)
+    {
+        case WorkflowMode::text:
+            return "Text";
+        case WorkflowMode::reference:
+            return "Reference";
+        case WorkflowMode::coverRemix:
+            return "Cover / Remix";
+        case WorkflowMode::customConditioning:
+            return "Custom Conditioning";
+    }
+
+    return "Text";
 }
 
 BackendStatus backendStatusFromString(const juce::String& value)
@@ -110,6 +150,36 @@ JobStatus jobStatusFromString(const juce::String& value)
     return JobStatus::idle;
 }
 
+TransportState transportStateFromString(const juce::String& value)
+{
+    const auto key = normalized(value);
+    if (key == "submitting")
+    {
+        return TransportState::submitting;
+    }
+    if (key == "queued")
+    {
+        return TransportState::queued;
+    }
+    if (key == "rendering")
+    {
+        return TransportState::rendering;
+    }
+    if (key == "succeeded")
+    {
+        return TransportState::succeeded;
+    }
+    if (key == "failed")
+    {
+        return TransportState::failed;
+    }
+    if (key == "compare ready" || key == "compare_ready" || key == "compare-ready")
+    {
+        return TransportState::compareReady;
+    }
+    return TransportState::idle;
+}
+
 ModelPreset modelPresetFromString(const juce::String& value)
 {
     const auto key = normalized(value);
@@ -136,5 +206,24 @@ QualityMode qualityModeFromString(const juce::String& value)
         return QualityMode::high;
     }
     return QualityMode::balanced;
+}
+
+WorkflowMode workflowModeFromString(const juce::String& value)
+{
+    const auto key = normalized(value);
+    if (key == "reference")
+    {
+        return WorkflowMode::reference;
+    }
+    if (key == "cover / remix" || key == "cover/remix" || key == "cover_remix")
+    {
+        return WorkflowMode::coverRemix;
+    }
+    if (key == "custom conditioning" || key == "custom_conditioning"
+        || key == "custom-conditioning")
+    {
+        return WorkflowMode::customConditioning;
+    }
+    return WorkflowMode::text;
 }
 }  // namespace acestep::vst3
