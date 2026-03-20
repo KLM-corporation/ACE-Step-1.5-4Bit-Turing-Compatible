@@ -84,6 +84,34 @@ void ACEStepVST3AudioProcessorEditor::clearSourceFile()
     persistTextFields();
 }
 
+void ACEStepVST3AudioProcessorEditor::chooseSessionExportFile()
+{
+    persistTextFields();
+    exportChooser_ = std::make_unique<juce::FileChooser>("Export session summary",
+                                                         juce::File("ace-step-session.txt"),
+                                                         "*.txt");
+    exportChooser_->launchAsync(juce::FileBrowserComponent::saveMode
+                                    | juce::FileBrowserComponent::canSelectFiles
+                                    | juce::FileBrowserComponent::warnAboutOverwriting,
+                                [this](const juce::FileChooser& chooser) {
+                                    auto file = chooser.getResult();
+                                    exportChooser_.reset();
+                                    if (file == juce::File())
+                                    {
+                                        return;
+                                    }
+
+                                    if (!file.hasFileExtension(".txt"))
+                                    {
+                                        file = file.withFileExtension(".txt");
+                                    }
+
+                                    [[maybe_unused]] const auto exported =
+                                        processor_.exportSessionSummary(file);
+                                    refreshStatusViews();
+                                });
+}
+
 void ACEStepVST3AudioProcessorEditor::playPreviewFile()
 {
     processor_.playPreview();

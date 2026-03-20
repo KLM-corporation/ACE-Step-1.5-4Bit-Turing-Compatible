@@ -24,6 +24,10 @@ void ACEStepVST3AudioProcessorEditor::configureEditors()
     auto& seedEditor = synthPanel_.seedEditor();
     auto& coverStrengthSlider = synthPanel_.coverStrengthSlider();
     auto& loraScaleSlider = synthPanel_.loraScaleSlider();
+    auto& projectNameEditor = compositionLane_.projectNameEditor();
+    auto& sectionPlanEditor = compositionLane_.sectionPlanEditor();
+    auto& chordProgressionEditor = compositionLane_.chordProgressionEditor();
+    auto& exportNotesEditor = compositionLane_.exportNotesEditor();
 
     backendEditor.setTextToShowWhenEmpty(kDefaultBackendBaseUrl, juce::Colours::grey);
     backendEditor.onTextChange = [this] { persistTextFields(); };
@@ -56,6 +60,20 @@ void ACEStepVST3AudioProcessorEditor::configureEditors()
 
     loraPathEditor.setTextToShowWhenEmpty("/absolute/path/to/adapter", juce::Colours::grey);
     loraPathEditor.onTextChange = [this] { persistTextFields(); };
+
+    projectNameEditor.setTextToShowWhenEmpty("Name this tape session", juce::Colours::grey);
+    projectNameEditor.onTextChange = [this] { persistTextFields(); };
+
+    sectionPlanEditor.setTextToShowWhenEmpty("Intro / Verse / Chorus / Bridge",
+                                             juce::Colours::grey);
+    sectionPlanEditor.onTextChange = [this] { persistTextFields(); };
+
+    chordProgressionEditor.setTextToShowWhenEmpty("Am - F - C - G", juce::Colours::grey);
+    chordProgressionEditor.onTextChange = [this] { persistTextFields(); };
+
+    exportNotesEditor.setTextToShowWhenEmpty("Mix notes, arrangement cues, export remarks",
+                                             juce::Colours::grey);
+    exportNotesEditor.onTextChange = [this] { persistTextFields(); };
 
     seedEditor.setInputRestrictions(10, "0123456789");
     seedEditor.onTextChange = [this] { persistTextFields(); };
@@ -160,6 +178,7 @@ void ACEStepVST3AudioProcessorEditor::configureSelectors()
     previewDeck_.stopButton().onClick = [this] { stopPreviewFile(); };
     previewDeck_.clearButton().onClick = [this] { clearPreviewFile(); };
     previewDeck_.revealButton().onClick = [this] { revealPreviewFile(); };
+    compositionLane_.exportButton().onClick = [this] { chooseSessionExportFile(); };
 }
 
 void ACEStepVST3AudioProcessorEditor::syncFromProcessor()
@@ -175,6 +194,13 @@ void ACEStepVST3AudioProcessorEditor::syncFromProcessor()
     synthPanel_.sourceAudioEditor().setText(state.sourceAudioPath, juce::dontSendNotification);
     synthPanel_.conditioningCodesEditor().setText(state.customConditioningCodes,
                                                   juce::dontSendNotification);
+    compositionLane_.projectNameEditor().setText(state.session.projectName,
+                                                 juce::dontSendNotification);
+    compositionLane_.sectionPlanEditor().setText(state.sectionPlan, juce::dontSendNotification);
+    compositionLane_.chordProgressionEditor().setText(state.chordProgression,
+                                                      juce::dontSendNotification);
+    compositionLane_.exportNotesEditor().setText(state.exportNotes,
+                                                 juce::dontSendNotification);
     synthPanel_.loraPathEditor().setText(state.loraPath, juce::dontSendNotification);
     synthPanel_.seedEditor().setText(juce::String(state.seed), juce::dontSendNotification);
     synthPanel_.durationBox().setSelectedId(state.durationSeconds, juce::dontSendNotification);
@@ -212,6 +238,10 @@ void ACEStepVST3AudioProcessorEditor::persistTextFields()
     auto& loraAdapterBox = synthPanel_.loraAdapterBox();
     auto& coverStrengthSlider = synthPanel_.coverStrengthSlider();
     auto& loraScaleSlider = synthPanel_.loraScaleSlider();
+    auto& projectNameEditor = compositionLane_.projectNameEditor();
+    auto& sectionPlanEditor = compositionLane_.sectionPlanEditor();
+    auto& chordProgressionEditor = compositionLane_.chordProgressionEditor();
+    auto& exportNotesEditor = compositionLane_.exportNotesEditor();
 
     state.backendBaseUrl = backendEditor.getText().trim();
     if (state.backendBaseUrl.isEmpty())
@@ -226,6 +256,10 @@ void ACEStepVST3AudioProcessorEditor::persistTextFields()
     state.referenceAudioPath = referenceAudioEditor.getText();
     state.sourceAudioPath = sourceAudioEditor.getText();
     state.customConditioningCodes = conditioningCodesEditor.getText();
+    state.session.projectName = projectNameEditor.getText().trim();
+    state.sectionPlan = sectionPlanEditor.getText();
+    state.chordProgression = chordProgressionEditor.getText();
+    state.exportNotes = exportNotesEditor.getText();
     state.loraPath = loraPathEditor.getText().trim();
     state.durationSeconds = durationBox.getSelectedId() == 0 ? kDefaultDurationSeconds
                                                              : durationBox.getSelectedId();
@@ -311,7 +345,8 @@ void ACEStepVST3AudioProcessorEditor::refreshStatusViews()
 {
     const auto& state = processor_.getState();
     const auto sessionName = state.session.sessionName.isEmpty()
-                                 ? "UNTITLED SESSION"
+                                 ? (state.session.projectName.isEmpty() ? "UNTITLED SESSION"
+                                                                        : state.session.projectName.toUpperCase())
                                  : state.session.sessionName.toUpperCase();
     statusStrip_.setSessionName("SESSION // " + sessionName);
     statusStrip_.setModeName(toString(state.workflowMode).toUpperCase() + " MODE");
@@ -383,6 +418,10 @@ void ACEStepVST3AudioProcessorEditor::refreshStatusViews()
         previewText += "\nPlayback // active";
     }
     previewDeck_.setPreviewSummary(previewText);
+
+    auto exportText = state.lastExportPath.isEmpty() ? "No session export written yet."
+                                                     : "EXPORTED // " + state.lastExportPath;
+    compositionLane_.setExportStatus(exportText);
 }
 
 void ACEStepVST3AudioProcessorEditor::cueComparePrimary()

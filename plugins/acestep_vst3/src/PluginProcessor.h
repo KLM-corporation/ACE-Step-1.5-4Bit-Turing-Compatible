@@ -50,6 +50,7 @@ public:
     void revealPreviewFile() const;
     [[nodiscard]] bool hasPreviewFile() const;
     [[nodiscard]] bool isPreviewPlaying() const;
+    [[nodiscard]] bool exportSessionSummary(const juce::File& file);
     void requestGeneration();
     void requestLoadLoRA();
     void requestUnloadLoRA();

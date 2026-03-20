@@ -2,6 +2,7 @@
 
 #include <JuceHeader.h>
 
+#include "CompositionLaneComponent.h"
 #include "PreviewDeckComponent.h"
 #include "ResultDeckComponent.h"
 #include "StatusStripComponent.h"
@@ -37,6 +38,7 @@ private:
     void clearReferenceFile();
     void chooseSourceFile();
     void clearSourceFile();
+    void chooseSessionExportFile();
     void playPreviewFile();
     void stopPreviewFile();
     void clearPreviewFile();
@@ -50,11 +52,13 @@ private:
     StatusStripComponent statusStrip_;
     SynthPanelComponent synthPanel_;
     TapeTransportComponent transport_;
+    CompositionLaneComponent compositionLane_;
     ResultDeckComponent resultDeck_;
     PreviewDeckComponent previewDeck_;
     std::unique_ptr<juce::FileChooser> previewChooser_;
     std::unique_ptr<juce::FileChooser> referenceChooser_;
     std::unique_ptr<juce::FileChooser> sourceChooser_;
+    std::unique_ptr<juce::FileChooser> exportChooser_;
     bool isSyncing_ = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ACEStepVST3AudioProcessorEditor)

@@ -45,6 +45,10 @@ std::unique_ptr<juce::XmlElement> createStateXml(const PluginState& state)
     xml->setAttribute("referenceAudioPath", state.referenceAudioPath);
     xml->setAttribute("sourceAudioPath", state.sourceAudioPath);
     xml->setAttribute("customConditioningCodes", state.customConditioningCodes);
+    xml->setAttribute("sectionPlan", state.sectionPlan);
+    xml->setAttribute("chordProgression", state.chordProgression);
+    xml->setAttribute("exportNotes", state.exportNotes);
+    xml->setAttribute("lastExportPath", state.lastExportPath);
     xml->setAttribute("durationSeconds", state.durationSeconds);
     xml->setAttribute("seed", state.seed);
     xml->setAttribute("audioCoverStrength", state.audioCoverStrength);
@@ -125,6 +129,10 @@ std::optional<PluginState> parseStateXml(const juce::XmlElement& xml)
     state.referenceAudioPath = xml.getStringAttribute("referenceAudioPath");
     state.sourceAudioPath = xml.getStringAttribute("sourceAudioPath");
     state.customConditioningCodes = xml.getStringAttribute("customConditioningCodes");
+    state.sectionPlan = xml.getStringAttribute("sectionPlan");
+    state.chordProgression = xml.getStringAttribute("chordProgression");
+    state.exportNotes = xml.getStringAttribute("exportNotes");
+    state.lastExportPath = xml.getStringAttribute("lastExportPath");
     state.durationSeconds = xml.getIntAttribute("durationSeconds", kDefaultDurationSeconds);
     state.seed = xml.getIntAttribute("seed", kDefaultSeed);
     state.audioCoverStrength = xml.getDoubleAttribute("audioCoverStrength", 0.6);

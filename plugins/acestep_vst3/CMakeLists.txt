@@ -36,6 +36,7 @@ target_sources(
     acestep_vst3
     PRIVATE
         src/PluginBackendClient.cpp
+        src/CompositionLaneComponent.cpp
         src/PluginEditor.cpp
         src/PluginEditorState.cpp
         src/PluginEditorPreview.cpp

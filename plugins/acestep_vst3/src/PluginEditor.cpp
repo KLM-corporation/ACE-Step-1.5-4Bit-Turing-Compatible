@@ -8,7 +8,7 @@ namespace acestep::vst3
 namespace
 {
 constexpr int kEditorWidth = 1080;
-constexpr int kEditorHeight = 980;
+constexpr int kEditorHeight = 1200;
 }  // namespace
 
 ACEStepVST3AudioProcessorEditor::ACEStepVST3AudioProcessorEditor(
@@ -22,6 +22,7 @@ ACEStepVST3AudioProcessorEditor::ACEStepVST3AudioProcessorEditor(
     for (auto* component : {static_cast<juce::Component*>(&statusStrip_),
                             static_cast<juce::Component*>(&synthPanel_),
                             static_cast<juce::Component*>(&transport_),
+                            static_cast<juce::Component*>(&compositionLane_),
                             static_cast<juce::Component*>(&resultDeck_),
                             static_cast<juce::Component*>(&previewDeck_)})
     {
@@ -54,6 +55,9 @@ void ACEStepVST3AudioProcessorEditor::resized()
     bounds.removeFromTop(14);
 
     auto upper = bounds.removeFromTop(480);
+    bounds.removeFromTop(14);
+    auto compositionBounds = bounds.removeFromTop(240);
+    bounds.removeFromTop(14);
     auto lower = bounds;
 
     auto synthBounds = upper.removeFromLeft((upper.getWidth() * 11) / 20);
@@ -61,7 +65,9 @@ void ACEStepVST3AudioProcessorEditor::resized()
     upper.removeFromLeft(14);
     transport_.setBounds(upper.reduced(0, 2));
 
-    auto resultBounds = lower.removeFromTop(220);
+    compositionLane_.setBounds(compositionBounds);
+
+    auto resultBounds = lower.removeFromTop(180);
     resultDeck_.setBounds(resultBounds);
     lower.removeFromTop(14);
     previewDeck_.setBounds(lower);

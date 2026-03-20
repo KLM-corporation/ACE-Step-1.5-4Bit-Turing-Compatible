@@ -42,6 +42,12 @@ bool hasValidAudioFilePath(const juce::String& path)
 {
     return path.isNotEmpty() && juce::File(path).existsAsFile();
 }
+
+juce::String printableField(const juce::String& value, const juce::String& fallback = "-")
+{
+    const auto trimmed = value.trim();
+    return trimmed.isEmpty() ? fallback : trimmed;
+}
 }  // namespace
 
 ACEStepVST3AudioProcessor::ACEStepVST3AudioProcessor()
@@ -231,6 +237,77 @@ bool ACEStepVST3AudioProcessor::hasPreviewFile() const
 bool ACEStepVST3AudioProcessor::isPreviewPlaying() const
 {
     return preview_.isPlaying();
+}
+
+bool ACEStepVST3AudioProcessor::exportSessionSummary(const juce::File& file)
+{
+    if (file == juce::File())
+    {
+        state_.errorMessage = "Choose an export destination first.";
+        return false;
+    }
+
+    juce::String summary;
+    summary << "ACE-Step VST3 Session Export\n";
+    summary << "===========================\n\n";
+    summary << "Project: " << printableField(state_.session.projectName, "Untitled Project") << "\n";
+    summary << "Session: " << printableField(state_.session.sessionName, "Untitled Session") << "\n";
+    summary << "Mode: " << printableField(toString(state_.workflowMode)) << "\n";
+    summary << "Prompt: " << printableField(state_.prompt) << "\n";
+    summary << "Lyrics: " << printableField(state_.lyrics) << "\n";
+    summary << "Sections: " << printableField(state_.sectionPlan) << "\n";
+    summary << "Chords: " << printableField(state_.chordProgression) << "\n";
+    summary << "Export Notes: " << printableField(state_.exportNotes) << "\n";
+    summary << "Duration: " << state_.durationSeconds << " seconds\n";
+    summary << "Seed: " << state_.seed << "\n";
+    summary << "Model: " << printableField(toString(state_.modelPreset)) << "\n";
+    summary << "Quality: " << printableField(toString(state_.qualityMode)) << "\n";
+    summary << "Selected Result Slot: " << (state_.selectedResultSlot + 1) << "\n";
+    summary << "Preview File: " << printableField(state_.previewFilePath) << "\n";
+
+    for (int index = 0; index < kResultSlotCount; ++index)
+    {
+        const auto slotIndex = static_cast<size_t>(index);
+        const auto& take = state_.resultTakes[slotIndex];
+        summary << "\nResult " << (index + 1) << ":\n";
+        summary << "  Label: "
+                << printableField(take.slotLabel.isNotEmpty() ? take.slotLabel
+                                                              : state_.resultSlots[slotIndex],
+                                  "Empty")
+                << "\n";
+        summary << "  Status: " << printableField(take.statusText, "Pending") << "\n";
+        summary << "  Remote URL: "
+                << printableField(take.remoteFileUrl.isNotEmpty() ? take.remoteFileUrl
+                                                                  : state_.resultFileUrls[slotIndex])
+                << "\n";
+        summary << "  Local Path: "
+                << printableField(take.localFilePath.isNotEmpty() ? take.localFilePath
+                                                                  : state_.resultLocalPaths[slotIndex])
+                << "\n";
+        summary << "  Seed: " << take.seed << "\n";
+        summary << "  Duration: " << take.durationSeconds << " seconds\n";
+        summary << "  Model: " << printableField(toString(take.modelPreset)) << "\n";
+        summary << "  Quality: " << printableField(toString(take.qualityMode)) << "\n";
+        summary << "  Compare Group: " << printableField(take.compareGroup) << "\n";
+    }
+
+    if (file.existsAsFile())
+    {
+        file.deleteFile();
+    }
+
+    juce::FileOutputStream output(file);
+    if (!output.openedOk())
+    {
+        state_.errorMessage = "Could not open the export destination.";
+        return false;
+    }
+
+    output.writeText(summary, false, false, "\n");
+    output.flush();
+    state_.lastExportPath = file.getFullPathName();
+    state_.errorMessage = {};
+    return true;
 }
 
 void ACEStepVST3AudioProcessor::requestLoadLoRA()

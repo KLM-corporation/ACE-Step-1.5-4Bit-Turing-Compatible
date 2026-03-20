@@ -45,6 +45,10 @@ struct PluginState final
     juce::String referenceAudioPath;
     juce::String sourceAudioPath;
     juce::String customConditioningCodes;
+    juce::String sectionPlan;
+    juce::String chordProgression;
+    juce::String exportNotes;
+    juce::String lastExportPath;
     int durationSeconds = kDefaultDurationSeconds;
     int seed = kDefaultSeed;
     double audioCoverStrength = 0.6;
