@@ -25,7 +25,7 @@ public:
     bool acceptsMidi() const override;
     bool producesMidi() const override;
     bool isMidiEffect() const override;
-    bool isSynth() const override;
+    bool isSynth() const;
     double getTailLengthSeconds() const override;
 
     int getNumPrograms() override;

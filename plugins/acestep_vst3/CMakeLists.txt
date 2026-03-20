@@ -30,6 +30,8 @@ juce_add_plugin(
     VST3_CATEGORIES Instrument
 )
 
+juce_generate_juce_header(acestep_vst3)
+
 target_sources(
     acestep_vst3
     PRIVATE
@@ -43,6 +45,7 @@ target_compile_features(acestep_vst3 PRIVATE cxx_std_20)
 target_compile_definitions(
     acestep_vst3
     PRIVATE
+        JUCE_VST3_CAN_REPLACE_VST2=0
         JUCE_WEB_BROWSER=0
         JUCE_USE_CURL=0
 )
