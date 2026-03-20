@@ -54,6 +54,13 @@ std::unique_ptr<juce::XmlElement> createStateXml(const PluginState& state)
     xml->setAttribute("jobStatus", toString(state.jobStatus));
     xml->setAttribute("transportState", toString(state.transportState));
     xml->setAttribute("workflowMode", toString(state.workflowMode));
+    xml->setAttribute("loraPath", state.loraPath);
+    xml->setAttribute("loraLoaded", state.loraLoaded);
+    xml->setAttribute("useLora", state.useLora);
+    xml->setAttribute("loraScale", state.loraScale);
+    xml->setAttribute("loraStatusText", state.loraStatusText);
+    xml->setAttribute("activeLoraAdapter", state.activeLoraAdapter);
+    xml->setAttribute("loraAdapters", state.loraAdapters.joinIntoString("||"));
     xml->setAttribute("currentTaskId", state.currentTaskId);
     xml->setAttribute("progressText", state.progressText);
     xml->setAttribute("errorMessage", state.errorMessage);
@@ -64,6 +71,7 @@ std::unique_ptr<juce::XmlElement> createStateXml(const PluginState& state)
     xml->setAttribute("compareSecondarySlot", state.session.compareSecondarySlot);
     xml->setAttribute("canCancelActiveTask", state.session.canCancelActiveTask);
     xml->setAttribute("selectedResultSlot", state.selectedResultSlot);
+    xml->setAttribute("compareOnPrimary", state.compareOnPrimary);
     xml->setAttribute("previewFilePath", state.previewFilePath);
     xml->setAttribute("previewDisplayName", state.previewDisplayName);
     for (size_t index = 0; index < state.resultSlots.size(); ++index)
@@ -126,6 +134,13 @@ std::optional<PluginState> parseStateXml(const juce::XmlElement& xml)
     state.jobStatus = jobStatusFromString(xml.getStringAttribute("jobStatus"));
     state.transportState = transportStateFromString(xml.getStringAttribute("transportState"));
     state.workflowMode = workflowModeFromString(xml.getStringAttribute("workflowMode"));
+    state.loraPath = xml.getStringAttribute("loraPath");
+    state.loraLoaded = xml.getBoolAttribute("loraLoaded", false);
+    state.useLora = xml.getBoolAttribute("useLora", false);
+    state.loraScale = xml.getDoubleAttribute("loraScale", 1.0);
+    state.loraStatusText = xml.getStringAttribute("loraStatusText");
+    state.activeLoraAdapter = xml.getStringAttribute("activeLoraAdapter");
+    state.loraAdapters.addTokens(xml.getStringAttribute("loraAdapters"), "||", {});
     state.currentTaskId = xml.getStringAttribute("currentTaskId");
     state.progressText = xml.getStringAttribute("progressText");
     state.errorMessage = xml.getStringAttribute("errorMessage");
@@ -137,6 +152,7 @@ std::optional<PluginState> parseStateXml(const juce::XmlElement& xml)
     state.session.canCancelActiveTask = xml.getBoolAttribute("canCancelActiveTask", false);
     state.selectedResultSlot =
         juce::jlimit(0, kResultSlotCount - 1, xml.getIntAttribute("selectedResultSlot", 0));
+    state.compareOnPrimary = xml.getBoolAttribute("compareOnPrimary", true);
     state.previewFilePath = xml.getStringAttribute("previewFilePath");
     state.previewDisplayName = xml.getStringAttribute("previewDisplayName");
     for (size_t index = 0; index < state.resultSlots.size(); ++index)

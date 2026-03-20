@@ -51,7 +51,14 @@ public:
     [[nodiscard]] bool hasPreviewFile() const;
     [[nodiscard]] bool isPreviewPlaying() const;
     void requestGeneration();
+    void requestLoadLoRA();
+    void requestUnloadLoRA();
+    void requestToggleLoRA(bool useLora);
+    void requestLoRAScale(double scale);
     void selectResultSlot(int index);
+    void selectCompareSlots(int primaryIndex, int secondaryIndex);
+    void cueCompareSlot(bool primarySlot);
+    void toggleCompareSlot();
     void pumpBackendWorkflow();
 
 private:
@@ -62,6 +69,11 @@ private:
         submitGeneration,
         pollGeneration,
         downloadPreview,
+        loraStatus,
+        loraLoad,
+        loraUnload,
+        loraToggle,
+        loraScale,
     };
 
     struct BackendTaskResult final
@@ -71,12 +83,20 @@ private:
         PluginGenerationStartResult generationStart;
         PluginGenerationPollResult generationPoll;
         PluginPreviewDownloadResult previewDownload;
+        PluginLoRAStatusResult loraStatus;
+        PluginLoRAOperationResult loraOperation;
     };
 
     void scheduleHealthCheck();
     void scheduleGenerationStart();
     void scheduleGenerationPoll();
     void schedulePreviewDownload(int slotIndex);
+    void scheduleLoRAStatusCheck();
+    void scheduleLoadLoRA();
+    void scheduleUnloadLoRA();
+    void scheduleToggleLoRA(bool useLora);
+    void scheduleLoRAScale(double scale);
+    void applyLoRAStatus(const PluginLoRAStatusResult& result);
     void applyCompletedTask(const BackendTaskResult& taskResult);
     void clearGeneratedResults();
     void syncPreviewFromState();
@@ -89,9 +109,15 @@ private:
     std::optional<BackendTaskResult> completedBackendTask_;
     std::atomic<bool> backendTaskRunning_ {false};
     juce::uint32 lastHealthCheckAtMs_ = 0;
+    juce::uint32 lastLoRAStatusCheckAtMs_ = 0;
     juce::uint32 lastPollRequestAtMs_ = 0;
     juce::String lastHealthCheckedBaseUrl_;
     std::optional<int> pendingPreviewDownloadSlot_;
+    bool pendingLoadLoRA_ = false;
+    bool pendingUnloadLoRA_ = false;
+    bool pendingLoRAStatusRefresh_ = true;
+    std::optional<bool> pendingLoRAToggle_;
+    std::optional<double> pendingLoRAScale_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ACEStepVST3AudioProcessor)
 };

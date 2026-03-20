@@ -45,6 +45,25 @@ struct PluginPreviewDownloadResult final
     juce::String errorMessage;
 };
 
+struct PluginLoRAStatusResult final
+{
+    bool succeeded = false;
+    bool loaded = false;
+    bool useLora = false;
+    double scale = 1.0;
+    juce::String activeAdapter;
+    juce::StringArray adapters;
+    juce::String errorMessage;
+};
+
+struct PluginLoRAOperationResult final
+{
+    bool succeeded = false;
+    juce::String message;
+    PluginLoRAStatusResult status;
+    juce::String errorMessage;
+};
+
 class PluginBackendClient final
 {
 public:
@@ -55,5 +74,14 @@ public:
     [[nodiscard]] PluginPreviewDownloadResult downloadPreviewFile(const juce::String& baseUrl,
                                                                   const juce::String& remoteFileUrl,
                                                                   int slotIndex) const;
+    [[nodiscard]] PluginLoRAStatusResult getLoRAStatus(const juce::String& baseUrl) const;
+    [[nodiscard]] PluginLoRAOperationResult loadLoRA(const juce::String& baseUrl,
+                                                     const juce::String& loraPath) const;
+    [[nodiscard]] PluginLoRAOperationResult unloadLoRA(const juce::String& baseUrl) const;
+    [[nodiscard]] PluginLoRAOperationResult toggleLoRA(const juce::String& baseUrl,
+                                                       bool useLora) const;
+    [[nodiscard]] PluginLoRAOperationResult setLoRAScale(const juce::String& baseUrl,
+                                                         double scale,
+                                                         const juce::String& adapterName) const;
 };
 }  // namespace acestep::vst3

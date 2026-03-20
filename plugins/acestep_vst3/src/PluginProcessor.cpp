@@ -233,6 +233,64 @@ bool ACEStepVST3AudioProcessor::isPreviewPlaying() const
     return preview_.isPlaying();
 }
 
+void ACEStepVST3AudioProcessor::requestLoadLoRA()
+{
+    if (state_.jobStatus == JobStatus::submitting || state_.jobStatus == JobStatus::queuedOrRunning)
+    {
+        state_.errorMessage = "Wait for the active render to finish before changing LoRA.";
+        return;
+    }
+
+    if (state_.loraPath.trim().isEmpty())
+    {
+        state_.errorMessage = "LoRA path is required before loading.";
+        return;
+    }
+
+    state_.loraStatusText = "Loading LoRA...";
+    state_.errorMessage = {};
+    pendingLoadLoRA_ = true;
+}
+
+void ACEStepVST3AudioProcessor::requestUnloadLoRA()
+{
+    if (state_.jobStatus == JobStatus::submitting || state_.jobStatus == JobStatus::queuedOrRunning)
+    {
+        state_.errorMessage = "Wait for the active render to finish before changing LoRA.";
+        return;
+    }
+
+    state_.loraStatusText = "Unloading LoRA...";
+    state_.errorMessage = {};
+    pendingUnloadLoRA_ = true;
+}
+
+void ACEStepVST3AudioProcessor::requestToggleLoRA(bool useLora)
+{
+    if (state_.jobStatus == JobStatus::submitting || state_.jobStatus == JobStatus::queuedOrRunning)
+    {
+        state_.errorMessage = "Wait for the active render to finish before changing LoRA.";
+        return;
+    }
+
+    state_.loraStatusText = useLora ? "Enabling LoRA..." : "Disabling LoRA...";
+    state_.errorMessage = {};
+    pendingLoRAToggle_ = useLora;
+}
+
+void ACEStepVST3AudioProcessor::requestLoRAScale(double scale)
+{
+    if (state_.jobStatus == JobStatus::submitting || state_.jobStatus == JobStatus::queuedOrRunning)
+    {
+        state_.errorMessage = "Wait for the active render to finish before changing LoRA.";
+        return;
+    }
+
+    state_.loraStatusText = "Updating LoRA scale...";
+    state_.errorMessage = {};
+    pendingLoRAScale_ = scale;
+}
+
 void ACEStepVST3AudioProcessor::requestGeneration()
 {
     if (state_.workflowMode == WorkflowMode::text && state_.prompt.trim().isEmpty())
@@ -314,6 +372,24 @@ void ACEStepVST3AudioProcessor::selectResultSlot(int index)
     }
 }
 
+void ACEStepVST3AudioProcessor::selectCompareSlots(int primaryIndex, int secondaryIndex)
+{
+    state_.session.comparePrimarySlot = juce::jlimit(0, kResultSlotCount - 1, primaryIndex);
+    state_.session.compareSecondarySlot = juce::jlimit(0, kResultSlotCount - 1, secondaryIndex);
+}
+
+void ACEStepVST3AudioProcessor::cueCompareSlot(bool primarySlot)
+{
+    state_.compareOnPrimary = primarySlot;
+    selectResultSlot(primarySlot ? state_.session.comparePrimarySlot
+                                 : state_.session.compareSecondarySlot);
+}
+
+void ACEStepVST3AudioProcessor::toggleCompareSlot()
+{
+    cueCompareSlot(!state_.compareOnPrimary);
+}
+
 void ACEStepVST3AudioProcessor::pumpBackendWorkflow()
 {
     std::optional<BackendTaskResult> completedTask;
@@ -343,6 +419,43 @@ void ACEStepVST3AudioProcessor::pumpBackendWorkflow()
         return;
     }
 
+    if (pendingUnloadLoRA_)
+    {
+        pendingUnloadLoRA_ = false;
+        scheduleUnloadLoRA();
+        return;
+    }
+
+    if (pendingLoadLoRA_)
+    {
+        pendingLoadLoRA_ = false;
+        scheduleLoadLoRA();
+        return;
+    }
+
+    if (pendingLoRAToggle_.has_value())
+    {
+        const auto useLora = *pendingLoRAToggle_;
+        pendingLoRAToggle_.reset();
+        scheduleToggleLoRA(useLora);
+        return;
+    }
+
+    if (pendingLoRAScale_.has_value())
+    {
+        const auto scale = *pendingLoRAScale_;
+        pendingLoRAScale_.reset();
+        scheduleLoRAScale(scale);
+        return;
+    }
+
+    if (pendingLoRAStatusRefresh_)
+    {
+        pendingLoRAStatusRefresh_ = false;
+        scheduleLoRAStatusCheck();
+        return;
+    }
+
     const auto now = juce::Time::getMillisecondCounter();
     if (state_.jobStatus == JobStatus::submitting)
     {
@@ -364,6 +477,10 @@ void ACEStepVST3AudioProcessor::pumpBackendWorkflow()
             || now - lastHealthCheckAtMs_ >= 5000)
         {
             scheduleHealthCheck();
+        }
+        if (now - lastLoRAStatusCheckAtMs_ >= 7000)
+        {
+            scheduleLoRAStatusCheck();
         }
     }
 }
@@ -450,6 +567,142 @@ void ACEStepVST3AudioProcessor::schedulePreviewDownload(int slotIndex)
             backendTaskRunning_.store(false);
             return juce::ThreadPoolJob::jobHasFinished;
         }));
+}
+
+void ACEStepVST3AudioProcessor::scheduleLoRAStatusCheck()
+{
+    if (backendTaskRunning_.exchange(true))
+    {
+        pendingLoRAStatusRefresh_ = true;
+        return;
+    }
+
+    const auto baseUrl = state_.backendBaseUrl;
+    lastLoRAStatusCheckAtMs_ = juce::Time::getMillisecondCounter();
+    backendThreadPool_.addJob(std::function<juce::ThreadPoolJob::JobStatus()>([this, baseUrl]() {
+        BackendTaskResult taskResult;
+        taskResult.kind = BackendTaskKind::loraStatus;
+        taskResult.loraStatus = backendClient_.getLoRAStatus(baseUrl);
+        const juce::ScopedLock lock(backendTaskLock_);
+        completedBackendTask_ = std::move(taskResult);
+        backendTaskRunning_.store(false);
+        return juce::ThreadPoolJob::jobHasFinished;
+    }));
+}
+
+void ACEStepVST3AudioProcessor::scheduleLoadLoRA()
+{
+    if (backendTaskRunning_.exchange(true))
+    {
+        pendingLoadLoRA_ = true;
+        return;
+    }
+
+    const auto baseUrl = state_.backendBaseUrl;
+    const auto loraPath = state_.loraPath;
+    backendThreadPool_.addJob(std::function<juce::ThreadPoolJob::JobStatus()>([this, baseUrl, loraPath]() {
+        BackendTaskResult taskResult;
+        taskResult.kind = BackendTaskKind::loraLoad;
+        taskResult.loraOperation = backendClient_.loadLoRA(baseUrl, loraPath);
+        const juce::ScopedLock lock(backendTaskLock_);
+        completedBackendTask_ = std::move(taskResult);
+        backendTaskRunning_.store(false);
+        return juce::ThreadPoolJob::jobHasFinished;
+    }));
+}
+
+void ACEStepVST3AudioProcessor::scheduleUnloadLoRA()
+{
+    if (backendTaskRunning_.exchange(true))
+    {
+        pendingUnloadLoRA_ = true;
+        return;
+    }
+
+    const auto baseUrl = state_.backendBaseUrl;
+    backendThreadPool_.addJob(std::function<juce::ThreadPoolJob::JobStatus()>([this, baseUrl]() {
+        BackendTaskResult taskResult;
+        taskResult.kind = BackendTaskKind::loraUnload;
+        taskResult.loraOperation = backendClient_.unloadLoRA(baseUrl);
+        const juce::ScopedLock lock(backendTaskLock_);
+        completedBackendTask_ = std::move(taskResult);
+        backendTaskRunning_.store(false);
+        return juce::ThreadPoolJob::jobHasFinished;
+    }));
+}
+
+void ACEStepVST3AudioProcessor::scheduleToggleLoRA(bool useLora)
+{
+    if (backendTaskRunning_.exchange(true))
+    {
+        pendingLoRAToggle_ = useLora;
+        return;
+    }
+
+    const auto baseUrl = state_.backendBaseUrl;
+    backendThreadPool_.addJob(std::function<juce::ThreadPoolJob::JobStatus()>([this, baseUrl, useLora]() {
+        BackendTaskResult taskResult;
+        taskResult.kind = BackendTaskKind::loraToggle;
+        taskResult.loraOperation = backendClient_.toggleLoRA(baseUrl, useLora);
+        const juce::ScopedLock lock(backendTaskLock_);
+        completedBackendTask_ = std::move(taskResult);
+        backendTaskRunning_.store(false);
+        return juce::ThreadPoolJob::jobHasFinished;
+    }));
+}
+
+void ACEStepVST3AudioProcessor::scheduleLoRAScale(double scale)
+{
+    if (backendTaskRunning_.exchange(true))
+    {
+        pendingLoRAScale_ = scale;
+        return;
+    }
+
+    const auto baseUrl = state_.backendBaseUrl;
+    const auto adapterName = state_.activeLoraAdapter;
+    backendThreadPool_.addJob(std::function<juce::ThreadPoolJob::JobStatus()>(
+        [this, baseUrl, scale, adapterName]() {
+            BackendTaskResult taskResult;
+            taskResult.kind = BackendTaskKind::loraScale;
+            taskResult.loraOperation = backendClient_.setLoRAScale(baseUrl, scale, adapterName);
+            const juce::ScopedLock lock(backendTaskLock_);
+            completedBackendTask_ = std::move(taskResult);
+            backendTaskRunning_.store(false);
+            return juce::ThreadPoolJob::jobHasFinished;
+        }));
+}
+
+void ACEStepVST3AudioProcessor::applyLoRAStatus(const PluginLoRAStatusResult& result)
+{
+    if (!result.succeeded)
+    {
+        if (result.errorMessage.isNotEmpty())
+        {
+            state_.errorMessage = result.errorMessage;
+            state_.loraStatusText = result.errorMessage;
+        }
+        return;
+    }
+
+    state_.loraLoaded = result.loaded;
+    state_.useLora = result.useLora;
+    state_.loraScale = result.scale;
+    state_.activeLoraAdapter = result.activeAdapter;
+    state_.loraAdapters = result.adapters;
+    if (result.loaded)
+    {
+        auto message = juce::String("Loaded");
+        if (result.activeAdapter.isNotEmpty())
+        {
+            message << ": " << result.activeAdapter;
+        }
+        state_.loraStatusText = message;
+    }
+    else
+    {
+        state_.loraStatusText = "No LoRA loaded.";
+    }
 }
 
 void ACEStepVST3AudioProcessor::applyCompletedTask(const BackendTaskResult& taskResult)
@@ -578,6 +831,30 @@ void ACEStepVST3AudioProcessor::applyCompletedTask(const BackendTaskResult& task
             }
             refreshSessionFlags(state_);
             return;
+        case BackendTaskKind::loraStatus:
+            applyLoRAStatus(taskResult.loraStatus);
+            return;
+        case BackendTaskKind::loraLoad:
+        case BackendTaskKind::loraUnload:
+        case BackendTaskKind::loraToggle:
+        case BackendTaskKind::loraScale:
+            if (!taskResult.loraOperation.succeeded)
+            {
+                state_.errorMessage = taskResult.loraOperation.errorMessage;
+                if (state_.errorMessage.isEmpty())
+                {
+                    state_.errorMessage = "LoRA operation failed.";
+                }
+                state_.loraStatusText = state_.errorMessage;
+                return;
+            }
+            state_.errorMessage = {};
+            if (taskResult.loraOperation.message.isNotEmpty())
+            {
+                state_.loraStatusText = taskResult.loraOperation.message;
+            }
+            applyLoRAStatus(taskResult.loraOperation.status);
+            return;
         }
         case BackendTaskKind::none:
             return;
@@ -593,6 +870,7 @@ void ACEStepVST3AudioProcessor::clearGeneratedResults()
     state_.session.lastCompletedSlot = -1;
     state_.session.comparePrimarySlot = -1;
     state_.session.compareSecondarySlot = -1;
+    state_.compareOnPrimary = true;
     pendingPreviewDownloadSlot_.reset();
     for (int index = 0; index < kResultSlotCount; ++index)
     {

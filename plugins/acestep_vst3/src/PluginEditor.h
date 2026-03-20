@@ -41,6 +41,9 @@ private:
     void stopPreviewFile();
     void clearPreviewFile();
     void revealPreviewFile();
+    void cueComparePrimary();
+    void cueCompareSecondary();
+    void toggleComparePreview();
 
     ACEStepVST3AudioProcessor& processor_;
     std::unique_ptr<V2LookAndFeel> lookAndFeel_;

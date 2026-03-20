@@ -8,8 +8,9 @@ SynthPanelComponent::SynthPanelComponent()
 {
     for (auto* label : {&backendUrlLabel_, &promptLabel_, &lyricsLabel_, &modeLabel_,
                         &referenceAudioLabel_, &sourceAudioLabel_, &conditioningCodesLabel_,
-                        &coverStrengthLabel_, &durationLabel_, &seedLabel_, &modelLabel_,
-                        &qualityLabel_})
+                        &coverStrengthLabel_, &loraPathLabel_, &loraAdapterLabel_,
+                        &loraScaleLabel_, &loraStatusLabel_, &durationLabel_, &seedLabel_,
+                        &modelLabel_, &qualityLabel_})
     {
         label->setColour(juce::Label::textColourId, v2::kLabelMuted);
         addAndMakeVisible(*label);
@@ -23,6 +24,10 @@ SynthPanelComponent::SynthPanelComponent()
     sourceAudioLabel_.setText("Source Audio", juce::dontSendNotification);
     conditioningCodesLabel_.setText("Conditioning Codes", juce::dontSendNotification);
     coverStrengthLabel_.setText("Conditioning Strength", juce::dontSendNotification);
+    loraPathLabel_.setText("LoRA Path", juce::dontSendNotification);
+    loraAdapterLabel_.setText("LoRA Adapter", juce::dontSendNotification);
+    loraScaleLabel_.setText("LoRA Scale", juce::dontSendNotification);
+    loraStatusLabel_.setText("No LoRA loaded.", juce::dontSendNotification);
     durationLabel_.setText("Duration", juce::dontSendNotification);
     seedLabel_.setText("Seed", juce::dontSendNotification);
     modelLabel_.setText("Engine", juce::dontSendNotification);
@@ -31,9 +36,14 @@ SynthPanelComponent::SynthPanelComponent()
     promptEditor_.setMultiLine(true);
     lyricsEditor_.setMultiLine(true);
     conditioningCodesEditor_.setMultiLine(true);
+    loraStatusLabel_.setColour(juce::Label::textColourId, v2::kAccentMint);
+    loraStatusLabel_.setJustificationType(juce::Justification::centredLeft);
     coverStrengthSlider_.setSliderStyle(juce::Slider::LinearHorizontal);
     coverStrengthSlider_.setTextBoxStyle(juce::Slider::TextBoxRight, false, 64, 22);
     coverStrengthSlider_.setRange(0.0, 1.0, 0.05);
+    loraScaleSlider_.setSliderStyle(juce::Slider::LinearHorizontal);
+    loraScaleSlider_.setTextBoxStyle(juce::Slider::TextBoxRight, false, 64, 22);
+    loraScaleSlider_.setRange(0.0, 1.0, 0.05);
 
     for (auto* component : {static_cast<juce::Component*>(&backendUrlEditor_),
                             static_cast<juce::Component*>(&modeBox_),
@@ -42,15 +52,21 @@ SynthPanelComponent::SynthPanelComponent()
                             static_cast<juce::Component*>(&referenceAudioEditor_),
                             static_cast<juce::Component*>(&sourceAudioEditor_),
                             static_cast<juce::Component*>(&conditioningCodesEditor_),
+                            static_cast<juce::Component*>(&loraPathEditor_),
                             static_cast<juce::Component*>(&seedEditor_),
                             static_cast<juce::Component*>(&durationBox_),
                             static_cast<juce::Component*>(&modelBox_),
                             static_cast<juce::Component*>(&qualityBox_),
+                            static_cast<juce::Component*>(&loraAdapterBox_),
                             static_cast<juce::Component*>(&coverStrengthSlider_),
+                            static_cast<juce::Component*>(&loraScaleSlider_),
                             static_cast<juce::Component*>(&chooseReferenceButton_),
                             static_cast<juce::Component*>(&clearReferenceButton_),
                             static_cast<juce::Component*>(&chooseSourceButton_),
-                            static_cast<juce::Component*>(&clearSourceButton_)})
+                            static_cast<juce::Component*>(&clearSourceButton_),
+                            static_cast<juce::Component*>(&loadLoRAButton_),
+                            static_cast<juce::Component*>(&unloadLoRAButton_),
+                            static_cast<juce::Component*>(&useLoRAToggle_)})
     {
         addAndMakeVisible(*component);
     }
@@ -97,10 +113,28 @@ void SynthPanelComponent::resized()
     clearSourceButton_.setBounds(sourceButtons.removeFromLeft(70));
     right.removeFromTop(8);
     conditioningCodesLabel_.setBounds(right.removeFromTop(labelHeight));
-    conditioningCodesEditor_.setBounds(right.removeFromTop(64));
+    conditioningCodesEditor_.setBounds(right.removeFromTop(52));
     right.removeFromTop(8);
     coverStrengthLabel_.setBounds(right.removeFromTop(labelHeight));
     coverStrengthSlider_.setBounds(right.removeFromTop(24));
+    right.removeFromTop(8);
+    loraPathLabel_.setBounds(right.removeFromTop(labelHeight));
+    loraPathEditor_.setBounds(right.removeFromTop(fieldHeight));
+    right.removeFromTop(8);
+    loraAdapterLabel_.setBounds(right.removeFromTop(labelHeight));
+    loraAdapterBox_.setBounds(right.removeFromTop(fieldHeight));
+    right.removeFromTop(6);
+    useLoRAToggle_.setBounds(right.removeFromTop(24));
+    right.removeFromTop(4);
+    loraScaleLabel_.setBounds(right.removeFromTop(labelHeight));
+    loraScaleSlider_.setBounds(right.removeFromTop(24));
+    right.removeFromTop(4);
+    auto loraButtons = right.removeFromTop(28);
+    loadLoRAButton_.setBounds(loraButtons.removeFromLeft(84));
+    loraButtons.removeFromLeft(8);
+    unloadLoRAButton_.setBounds(loraButtons.removeFromLeft(84));
+    right.removeFromTop(6);
+    loraStatusLabel_.setBounds(right.removeFromTop(34));
     right.removeFromTop(8);
     durationLabel_.setBounds(right.removeFromTop(labelHeight));
     durationBox_.setBounds(right.removeFromTop(fieldHeight));
@@ -124,12 +158,15 @@ juce::TextEditor& SynthPanelComponent::conditioningCodesEditor() noexcept
 {
     return conditioningCodesEditor_;
 }
+juce::TextEditor& SynthPanelComponent::loraPathEditor() noexcept { return loraPathEditor_; }
 juce::TextEditor& SynthPanelComponent::seedEditor() noexcept { return seedEditor_; }
 juce::ComboBox& SynthPanelComponent::modeBox() noexcept { return modeBox_; }
 juce::ComboBox& SynthPanelComponent::durationBox() noexcept { return durationBox_; }
 juce::ComboBox& SynthPanelComponent::modelBox() noexcept { return modelBox_; }
 juce::ComboBox& SynthPanelComponent::qualityBox() noexcept { return qualityBox_; }
+juce::ComboBox& SynthPanelComponent::loraAdapterBox() noexcept { return loraAdapterBox_; }
 juce::Slider& SynthPanelComponent::coverStrengthSlider() noexcept { return coverStrengthSlider_; }
+juce::Slider& SynthPanelComponent::loraScaleSlider() noexcept { return loraScaleSlider_; }
 juce::TextButton& SynthPanelComponent::chooseReferenceButton() noexcept
 {
     return chooseReferenceButton_;
@@ -140,4 +177,8 @@ juce::TextButton& SynthPanelComponent::clearReferenceButton() noexcept
 }
 juce::TextButton& SynthPanelComponent::chooseSourceButton() noexcept { return chooseSourceButton_; }
 juce::TextButton& SynthPanelComponent::clearSourceButton() noexcept { return clearSourceButton_; }
+juce::TextButton& SynthPanelComponent::loadLoRAButton() noexcept { return loadLoRAButton_; }
+juce::TextButton& SynthPanelComponent::unloadLoRAButton() noexcept { return unloadLoRAButton_; }
+juce::ToggleButton& SynthPanelComponent::useLoRAToggle() noexcept { return useLoRAToggle_; }
+juce::Label& SynthPanelComponent::loraStatusLabel() noexcept { return loraStatusLabel_; }
 }  // namespace acestep::vst3

@@ -20,8 +20,10 @@ void ACEStepVST3AudioProcessorEditor::configureEditors()
     auto& referenceAudioEditor = synthPanel_.referenceAudioEditor();
     auto& sourceAudioEditor = synthPanel_.sourceAudioEditor();
     auto& conditioningCodesEditor = synthPanel_.conditioningCodesEditor();
+    auto& loraPathEditor = synthPanel_.loraPathEditor();
     auto& seedEditor = synthPanel_.seedEditor();
     auto& coverStrengthSlider = synthPanel_.coverStrengthSlider();
+    auto& loraScaleSlider = synthPanel_.loraScaleSlider();
 
     backendEditor.setTextToShowWhenEmpty(kDefaultBackendBaseUrl, juce::Colours::grey);
     backendEditor.onTextChange = [this] { persistTextFields(); };
@@ -52,9 +54,21 @@ void ACEStepVST3AudioProcessorEditor::configureEditors()
                                                    juce::Colours::grey);
     conditioningCodesEditor.onTextChange = [this] { persistTextFields(); };
 
+    loraPathEditor.setTextToShowWhenEmpty("/absolute/path/to/adapter", juce::Colours::grey);
+    loraPathEditor.onTextChange = [this] { persistTextFields(); };
+
     seedEditor.setInputRestrictions(10, "0123456789");
     seedEditor.onTextChange = [this] { persistTextFields(); };
     coverStrengthSlider.onValueChange = [this] { persistTextFields(); };
+    loraScaleSlider.onValueChange = [this, &loraScaleSlider] {
+        if (isSyncing_)
+        {
+            return;
+        }
+        persistTextFields();
+        processor_.requestLoRAScale(loraScaleSlider.getValue());
+        refreshStatusViews();
+    };
 }
 
 void ACEStepVST3AudioProcessorEditor::configureSelectors()
@@ -62,7 +76,10 @@ void ACEStepVST3AudioProcessorEditor::configureSelectors()
     auto& durationBox = synthPanel_.durationBox();
     auto& modelBox = synthPanel_.modelBox();
     auto& qualityBox = synthPanel_.qualityBox();
-    auto& resultSlotBox = resultDeck_.resultSelector();
+    auto& loraAdapterBox = synthPanel_.loraAdapterBox();
+    auto& resultSelector = resultDeck_.resultSelector();
+    auto& comparePrimary = resultDeck_.comparePrimarySelector();
+    auto& compareSecondary = resultDeck_.compareSecondarySelector();
 
     for (const auto duration : {10, 30, 60, 120})
     {
@@ -74,15 +91,36 @@ void ACEStepVST3AudioProcessorEditor::configureSelectors()
     qualityBox.addItem(toString(QualityMode::fast), 1);
     qualityBox.addItem(toString(QualityMode::balanced), 2);
     qualityBox.addItem(toString(QualityMode::high), 3);
+    loraAdapterBox.setTextWhenNothingSelected("Default");
 
     durationBox.onChange = [this] { persistTextFields(); };
     modelBox.onChange = [this] { persistTextFields(); };
     qualityBox.onChange = [this] { persistTextFields(); };
+    loraAdapterBox.onChange = [this] { persistTextFields(); };
+
     synthPanel_.chooseReferenceButton().onClick = [this] { chooseReferenceFile(); };
     synthPanel_.clearReferenceButton().onClick = [this] { clearReferenceFile(); };
     synthPanel_.chooseSourceButton().onClick = [this] { chooseSourceFile(); };
     synthPanel_.clearSourceButton().onClick = [this] { clearSourceFile(); };
-    resultSlotBox.onChange = [this] {
+    synthPanel_.useLoRAToggle().onClick = [this] {
+        if (isSyncing_)
+        {
+            return;
+        }
+        processor_.requestToggleLoRA(synthPanel_.useLoRAToggle().getToggleState());
+        refreshStatusViews();
+    };
+    synthPanel_.loadLoRAButton().onClick = [this] {
+        persistTextFields();
+        processor_.requestLoadLoRA();
+        refreshStatusViews();
+    };
+    synthPanel_.unloadLoRAButton().onClick = [this] {
+        processor_.requestUnloadLoRA();
+        refreshStatusViews();
+    };
+
+    resultSelector.onChange = [this] {
         if (isSyncing_)
         {
             return;
@@ -90,6 +128,28 @@ void ACEStepVST3AudioProcessorEditor::configureSelectors()
         processor_.selectResultSlot(juce::jmax(0, resultDeck_.resultSelector().getSelectedItemIndex()));
         refreshStatusViews();
     };
+    comparePrimary.onChange = [this] {
+        if (isSyncing_)
+        {
+            return;
+        }
+        processor_.selectCompareSlots(juce::jmax(0, resultDeck_.comparePrimarySelector().getSelectedItemIndex()),
+                                      juce::jmax(0, resultDeck_.compareSecondarySelector().getSelectedItemIndex()));
+        refreshStatusViews();
+    };
+    compareSecondary.onChange = [this] {
+        if (isSyncing_)
+        {
+            return;
+        }
+        processor_.selectCompareSlots(juce::jmax(0, resultDeck_.comparePrimarySelector().getSelectedItemIndex()),
+                                      juce::jmax(0, resultDeck_.compareSecondarySelector().getSelectedItemIndex()));
+        refreshStatusViews();
+    };
+    resultDeck_.cueCompareAButton().onClick = [this] { cueComparePrimary(); };
+    resultDeck_.cueCompareBButton().onClick = [this] { cueCompareSecondary(); };
+    resultDeck_.toggleCompareButton().onClick = [this] { toggleComparePreview(); };
+
     transport_.generateButton().onClick = [this] {
         persistTextFields();
         processor_.requestGeneration();
@@ -115,13 +175,17 @@ void ACEStepVST3AudioProcessorEditor::syncFromProcessor()
     synthPanel_.sourceAudioEditor().setText(state.sourceAudioPath, juce::dontSendNotification);
     synthPanel_.conditioningCodesEditor().setText(state.customConditioningCodes,
                                                   juce::dontSendNotification);
+    synthPanel_.loraPathEditor().setText(state.loraPath, juce::dontSendNotification);
     synthPanel_.seedEditor().setText(juce::String(state.seed), juce::dontSendNotification);
     synthPanel_.durationBox().setSelectedId(state.durationSeconds, juce::dontSendNotification);
     synthPanel_.modelBox().setSelectedId(static_cast<int>(state.modelPreset) + 1,
                                          juce::dontSendNotification);
     synthPanel_.qualityBox().setSelectedId(static_cast<int>(state.qualityMode) + 1,
                                            juce::dontSendNotification);
-    synthPanel_.coverStrengthSlider().setValue(state.audioCoverStrength, juce::dontSendNotification);
+    synthPanel_.coverStrengthSlider().setValue(state.audioCoverStrength,
+                                               juce::dontSendNotification);
+    synthPanel_.loraScaleSlider().setValue(state.loraScale, juce::dontSendNotification);
+    synthPanel_.useLoRAToggle().setToggleState(state.useLora, juce::dontSendNotification);
     isSyncing_ = false;
 }
 
@@ -140,11 +204,14 @@ void ACEStepVST3AudioProcessorEditor::persistTextFields()
     auto& referenceAudioEditor = synthPanel_.referenceAudioEditor();
     auto& sourceAudioEditor = synthPanel_.sourceAudioEditor();
     auto& conditioningCodesEditor = synthPanel_.conditioningCodesEditor();
+    auto& loraPathEditor = synthPanel_.loraPathEditor();
     auto& seedEditor = synthPanel_.seedEditor();
     auto& durationBox = synthPanel_.durationBox();
     auto& modelBox = synthPanel_.modelBox();
     auto& qualityBox = synthPanel_.qualityBox();
+    auto& loraAdapterBox = synthPanel_.loraAdapterBox();
     auto& coverStrengthSlider = synthPanel_.coverStrengthSlider();
+    auto& loraScaleSlider = synthPanel_.loraScaleSlider();
 
     state.backendBaseUrl = backendEditor.getText().trim();
     if (state.backendBaseUrl.isEmpty())
@@ -159,10 +226,12 @@ void ACEStepVST3AudioProcessorEditor::persistTextFields()
     state.referenceAudioPath = referenceAudioEditor.getText();
     state.sourceAudioPath = sourceAudioEditor.getText();
     state.customConditioningCodes = conditioningCodesEditor.getText();
+    state.loraPath = loraPathEditor.getText().trim();
     state.durationSeconds = durationBox.getSelectedId() == 0 ? kDefaultDurationSeconds
                                                              : durationBox.getSelectedId();
     state.seed = seedEditor.getText().getIntValue();
     state.audioCoverStrength = coverStrengthSlider.getValue();
+    state.loraScale = loraScaleSlider.getValue();
     if (state.seed <= 0)
     {
         state.seed = kDefaultSeed;
@@ -171,6 +240,14 @@ void ACEStepVST3AudioProcessorEditor::persistTextFields()
 
     state.modelPreset = static_cast<ModelPreset>(juce::jmax(0, modelBox.getSelectedItemIndex()));
     state.qualityMode = static_cast<QualityMode>(juce::jmax(0, qualityBox.getSelectedItemIndex()));
+    if (loraAdapterBox.getSelectedItemIndex() >= 0)
+    {
+        state.activeLoraAdapter = loraAdapterBox.getText();
+    }
+    state.session.comparePrimarySlot =
+        juce::jmax(0, resultDeck_.comparePrimarySelector().getSelectedItemIndex());
+    state.session.compareSecondarySlot =
+        juce::jmax(0, resultDeck_.compareSecondarySelector().getSelectedItemIndex());
     refreshStatusViews();
 }
 
@@ -178,8 +255,14 @@ void ACEStepVST3AudioProcessorEditor::refreshResultSelector()
 {
     const auto& state = processor_.getState();
     auto& resultSelector = resultDeck_.resultSelector();
+    auto& comparePrimary = resultDeck_.comparePrimarySelector();
+    auto& compareSecondary = resultDeck_.compareSecondarySelector();
+    auto& loraAdapterBox = synthPanel_.loraAdapterBox();
+
     isSyncing_ = true;
     resultSelector.clear(juce::dontSendNotification);
+    comparePrimary.clear(juce::dontSendNotification);
+    compareSecondary.clear(juce::dontSendNotification);
     for (int index = 0; index < kResultSlotCount; ++index)
     {
         auto label = state.resultSlots[static_cast<size_t>(index)];
@@ -188,16 +271,48 @@ void ACEStepVST3AudioProcessorEditor::refreshResultSelector()
             label = "Result " + juce::String(index + 1) + " - empty";
         }
         resultSelector.addItem(label, index + 1);
+        comparePrimary.addItem(label, index + 1);
+        compareSecondary.addItem(label, index + 1);
     }
     resultSelector.setSelectedId(state.selectedResultSlot + 1, juce::dontSendNotification);
+    comparePrimary.setSelectedId(state.session.comparePrimarySlot >= 0 ? state.session.comparePrimarySlot + 1
+                                                                       : 0,
+                                 juce::dontSendNotification);
+    compareSecondary.setSelectedId(state.session.compareSecondarySlot >= 0
+                                       ? state.session.compareSecondarySlot + 1
+                                       : 0,
+                                   juce::dontSendNotification);
+
+    loraAdapterBox.clear(juce::dontSendNotification);
+    if (state.loraAdapters.isEmpty())
+    {
+        loraAdapterBox.setText("Default", juce::dontSendNotification);
+    }
+    else
+    {
+        auto itemId = 1;
+        for (const auto& adapter : state.loraAdapters)
+        {
+            loraAdapterBox.addItem(adapter, itemId++);
+        }
+        if (state.activeLoraAdapter.isNotEmpty())
+        {
+            loraAdapterBox.setText(state.activeLoraAdapter, juce::dontSendNotification);
+        }
+        else
+        {
+            loraAdapterBox.setSelectedItemIndex(0, juce::dontSendNotification);
+        }
+    }
     isSyncing_ = false;
 }
 
 void ACEStepVST3AudioProcessorEditor::refreshStatusViews()
 {
     const auto& state = processor_.getState();
-    const auto sessionName = state.prompt.trim().isEmpty() ? "UNTITLED SESSION"
-                                                           : state.prompt.substring(0, 48).toUpperCase();
+    const auto sessionName = state.session.sessionName.isEmpty()
+                                 ? "UNTITLED SESSION"
+                                 : state.session.sessionName.toUpperCase();
     statusStrip_.setSessionName("SESSION // " + sessionName);
     statusStrip_.setModeName(toString(state.workflowMode).toUpperCase() + " MODE");
     statusStrip_.setBackendStatus(state.backendStatus);
@@ -230,6 +345,34 @@ void ACEStepVST3AudioProcessorEditor::refreshStatusViews()
     }
     resultDeck_.setTakeSummary(takeTitle, takeDetail);
 
+    const auto comparePrimarySlot = state.session.comparePrimarySlot >= 0
+                                        ? state.session.comparePrimarySlot + 1
+                                        : 0;
+    const auto compareSecondarySlot = state.session.compareSecondarySlot >= 0
+                                          ? state.session.compareSecondarySlot + 1
+                                          : 0;
+    auto compareSummary = juce::String("COMPARE // ");
+    if (comparePrimarySlot == 0 || compareSecondarySlot == 0)
+    {
+        compareSummary += "Select two result slots";
+    }
+    else
+    {
+        compareSummary += "A" + juce::String(comparePrimarySlot) + " vs B"
+                          + juce::String(compareSecondarySlot);
+        compareSummary += state.compareOnPrimary ? " // active A" : " // active B";
+    }
+    resultDeck_.setCompareSummary(compareSummary);
+    resultDeck_.toggleCompareButton().setButtonText(state.compareOnPrimary ? "Toggle to B"
+                                                                           : "Toggle to A");
+
+    synthPanel_.loraStatusLabel().setText(state.loraStatusText.isEmpty() ? "No LoRA loaded."
+                                                                         : state.loraStatusText,
+                                          juce::dontSendNotification);
+    synthPanel_.useLoRAToggle().setEnabled(state.loraLoaded);
+    synthPanel_.unloadLoRAButton().setEnabled(state.loraLoaded);
+    synthPanel_.loraScaleSlider().setEnabled(state.loraLoaded);
+
     auto previewText = state.previewDisplayName.isEmpty() ? "No preview file loaded."
                                                           : "Loaded // " + state.previewDisplayName;
     previewText += "\n";
@@ -240,5 +383,29 @@ void ACEStepVST3AudioProcessorEditor::refreshStatusViews()
         previewText += "\nPlayback // active";
     }
     previewDeck_.setPreviewSummary(previewText);
+}
+
+void ACEStepVST3AudioProcessorEditor::cueComparePrimary()
+{
+    processor_.selectCompareSlots(juce::jmax(0, resultDeck_.comparePrimarySelector().getSelectedItemIndex()),
+                                  juce::jmax(0, resultDeck_.compareSecondarySelector().getSelectedItemIndex()));
+    processor_.cueCompareSlot(true);
+    refreshStatusViews();
+}
+
+void ACEStepVST3AudioProcessorEditor::cueCompareSecondary()
+{
+    processor_.selectCompareSlots(juce::jmax(0, resultDeck_.comparePrimarySelector().getSelectedItemIndex()),
+                                  juce::jmax(0, resultDeck_.compareSecondarySelector().getSelectedItemIndex()));
+    processor_.cueCompareSlot(false);
+    refreshStatusViews();
+}
+
+void ACEStepVST3AudioProcessorEditor::toggleComparePreview()
+{
+    processor_.selectCompareSlots(juce::jmax(0, resultDeck_.comparePrimarySelector().getSelectedItemIndex()),
+                                  juce::jmax(0, resultDeck_.compareSecondarySelector().getSelectedItemIndex()));
+    processor_.toggleCompareSlot();
+    refreshStatusViews();
 }
 }  // namespace acestep::vst3

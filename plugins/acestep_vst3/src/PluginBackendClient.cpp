@@ -180,6 +180,57 @@ juce::String chooseFileExtension(const juce::String& remoteFileUrl)
 
     return extension;
 }
+
+PluginLoRAStatusResult parseLoRAStatusResponse(const juce::var& response)
+{
+    PluginLoRAStatusResult result;
+    auto* dataObject = getWrappedDataObject(response);
+    if (dataObject == nullptr)
+    {
+        result.errorMessage = "Backend did not return LoRA status data.";
+        return result;
+    }
+
+    result.succeeded = true;
+    result.loaded = static_cast<bool>(dataObject->getProperty("lora_loaded"));
+    result.useLora = static_cast<bool>(dataObject->getProperty("use_lora"));
+    result.scale = static_cast<double>(dataObject->getProperty("lora_scale"));
+    result.activeAdapter = dataObject->getProperty("active_adapter").toString();
+    if (const auto adaptersVar = dataObject->getProperty("adapters"); adaptersVar.isArray())
+    {
+        for (const auto& item : *adaptersVar.getArray())
+        {
+            const auto adapter = item.toString();
+            if (adapter.isNotEmpty())
+            {
+                result.adapters.addIfNotAlreadyThere(adapter);
+            }
+        }
+    }
+    return result;
+}
+
+PluginLoRAOperationResult buildLoRAOperationResult(const juce::String& baseUrl,
+                                                   const juce::var& response,
+                                                   const PluginBackendClient& client)
+{
+    PluginLoRAOperationResult result;
+    auto* dataObject = getWrappedDataObject(response);
+    if (dataObject == nullptr)
+    {
+        result.errorMessage = "Backend did not return a LoRA operation payload.";
+        return result;
+    }
+
+    result.message = dataObject->getProperty("message").toString();
+    result.status = client.getLoRAStatus(baseUrl);
+    result.succeeded = result.status.succeeded;
+    if (!result.succeeded && result.errorMessage.isEmpty())
+    {
+        result.errorMessage = result.status.errorMessage;
+    }
+    return result;
+}
 }  // namespace
 
 PluginHealthCheckResult PluginBackendClient::checkHealth(const juce::String& baseUrl) const
@@ -429,5 +480,117 @@ PluginPreviewDownloadResult PluginBackendClient::downloadPreviewFile(const juce:
     result.localFilePath = previewFile.getFullPathName();
     result.displayName = previewFile.getFileName();
     return result;
+}
+
+PluginLoRAStatusResult PluginBackendClient::getLoRAStatus(const juce::String& baseUrl) const
+{
+    juce::var response;
+    juce::String errorMessage;
+    if (!readJsonResponse(buildUrl(baseUrl, "/v1/lora/status"),
+                          "GET",
+                          {},
+                          {},
+                          response,
+                          errorMessage))
+    {
+        PluginLoRAStatusResult result;
+        result.errorMessage = errorMessage;
+        return result;
+    }
+
+    return parseLoRAStatusResponse(response);
+}
+
+PluginLoRAOperationResult PluginBackendClient::loadLoRA(const juce::String& baseUrl,
+                                                        const juce::String& loraPath) const
+{
+    juce::DynamicObject::Ptr payload = new juce::DynamicObject();
+    payload->setProperty("lora_path", loraPath);
+
+    juce::var response;
+    juce::String errorMessage;
+    if (!readJsonResponse(buildUrl(baseUrl, "/v1/lora/load"),
+                          "POST",
+                          juce::JSON::toString(juce::var(payload.get())),
+                          "application/json",
+                          response,
+                          errorMessage))
+    {
+        PluginLoRAOperationResult result;
+        result.errorMessage = errorMessage;
+        return result;
+    }
+
+    return buildLoRAOperationResult(baseUrl, response, *this);
+}
+
+PluginLoRAOperationResult PluginBackendClient::unloadLoRA(const juce::String& baseUrl) const
+{
+    juce::var response;
+    juce::String errorMessage;
+    if (!readJsonResponse(buildUrl(baseUrl, "/v1/lora/unload"),
+                          "POST",
+                          "{}",
+                          "application/json",
+                          response,
+                          errorMessage))
+    {
+        PluginLoRAOperationResult result;
+        result.errorMessage = errorMessage;
+        return result;
+    }
+
+    return buildLoRAOperationResult(baseUrl, response, *this);
+}
+
+PluginLoRAOperationResult PluginBackendClient::toggleLoRA(const juce::String& baseUrl,
+                                                          bool useLora) const
+{
+    juce::DynamicObject::Ptr payload = new juce::DynamicObject();
+    payload->setProperty("use_lora", useLora);
+
+    juce::var response;
+    juce::String errorMessage;
+    if (!readJsonResponse(buildUrl(baseUrl, "/v1/lora/toggle"),
+                          "POST",
+                          juce::JSON::toString(juce::var(payload.get())),
+                          "application/json",
+                          response,
+                          errorMessage))
+    {
+        PluginLoRAOperationResult result;
+        result.errorMessage = errorMessage;
+        return result;
+    }
+
+    return buildLoRAOperationResult(baseUrl, response, *this);
+}
+
+PluginLoRAOperationResult PluginBackendClient::setLoRAScale(const juce::String& baseUrl,
+                                                            double scale,
+                                                            const juce::String& adapterName) const
+{
+    juce::DynamicObject::Ptr payload = new juce::DynamicObject();
+    payload->setProperty("scale", scale);
+    if (adapterName.isNotEmpty())
+    {
+        payload->setProperty("adapter_name", adapterName);
+    }
+
+    juce::var response;
+    juce::String errorMessage;
+    if (!readJsonResponse(buildUrl(baseUrl, "/v1/lora/scale"),
+                          "POST",
+                          juce::JSON::toString(juce::var(payload.get())),
+                          "application/json",
+                          response,
+                          errorMessage))
+    {
+        PluginLoRAOperationResult result;
+        result.errorMessage = errorMessage;
+        return result;
+    }
+
+    return buildLoRAOperationResult(baseUrl, response, *this);
 }
 }  // namespace acestep::vst3
