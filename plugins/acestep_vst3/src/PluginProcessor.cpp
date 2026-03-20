@@ -37,6 +37,11 @@ void refreshSessionFlags(PluginState& state)
         state.session.sessionName = deriveSessionName(state);
     }
 }
+
+bool hasValidAudioFilePath(const juce::String& path)
+{
+    return path.isNotEmpty() && juce::File(path).existsAsFile();
+}
 }  // namespace
 
 ACEStepVST3AudioProcessor::ACEStepVST3AudioProcessor()
@@ -230,7 +235,7 @@ bool ACEStepVST3AudioProcessor::isPreviewPlaying() const
 
 void ACEStepVST3AudioProcessor::requestGeneration()
 {
-    if (state_.prompt.trim().isEmpty())
+    if (state_.workflowMode == WorkflowMode::text && state_.prompt.trim().isEmpty())
     {
         state_.jobStatus = JobStatus::failed;
         state_.transportState = TransportState::failed;
@@ -240,10 +245,54 @@ void ACEStepVST3AudioProcessor::requestGeneration()
         return;
     }
 
+    if (state_.workflowMode == WorkflowMode::reference
+        && !hasValidAudioFilePath(state_.referenceAudioPath))
+    {
+        state_.jobStatus = JobStatus::failed;
+        state_.transportState = TransportState::failed;
+        state_.progressText = {};
+        state_.errorMessage = "Reference mode requires a valid reference audio file.";
+        refreshSessionFlags(state_);
+        return;
+    }
+
+    if (state_.workflowMode == WorkflowMode::coverRemix
+        && !hasValidAudioFilePath(state_.sourceAudioPath))
+    {
+        state_.jobStatus = JobStatus::failed;
+        state_.transportState = TransportState::failed;
+        state_.progressText = {};
+        state_.errorMessage = "Cover / Remix mode requires a valid source audio file.";
+        refreshSessionFlags(state_);
+        return;
+    }
+
+    if (state_.workflowMode == WorkflowMode::coverRemix
+        && state_.referenceAudioPath.isNotEmpty()
+        && !hasValidAudioFilePath(state_.referenceAudioPath))
+    {
+        state_.jobStatus = JobStatus::failed;
+        state_.transportState = TransportState::failed;
+        state_.progressText = {};
+        state_.errorMessage = "Reference audio path is set but the file does not exist.";
+        refreshSessionFlags(state_);
+        return;
+    }
+
+    if (state_.workflowMode == WorkflowMode::customConditioning
+        && state_.customConditioningCodes.trim().isEmpty())
+    {
+        state_.jobStatus = JobStatus::failed;
+        state_.transportState = TransportState::failed;
+        state_.progressText = {};
+        state_.errorMessage = "Custom Conditioning mode requires audio semantic codes.";
+        refreshSessionFlags(state_);
+        return;
+    }
+
     clearGeneratedResults();
     stopPreview();
     clearPreviewFile();
-    state_.workflowMode = WorkflowMode::text;
     state_.session.sessionName = deriveSessionName(state_);
     state_.jobStatus = JobStatus::submitting;
     state_.transportState = TransportState::submitting;

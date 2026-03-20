@@ -42,8 +42,12 @@ struct PluginState final
     juce::String backendBaseUrl = kDefaultBackendBaseUrl;
     juce::String prompt;
     juce::String lyrics;
+    juce::String referenceAudioPath;
+    juce::String sourceAudioPath;
+    juce::String customConditioningCodes;
     int durationSeconds = kDefaultDurationSeconds;
     int seed = kDefaultSeed;
+    double audioCoverStrength = 0.6;
     ModelPreset modelPreset = ModelPreset::turbo;
     QualityMode qualityMode = QualityMode::balanced;
     BackendStatus backendStatus = BackendStatus::ready;

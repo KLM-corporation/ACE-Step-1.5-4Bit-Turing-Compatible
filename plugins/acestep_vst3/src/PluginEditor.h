@@ -33,6 +33,10 @@ private:
     void refreshResultSelector();
     void refreshStatusViews();
     void choosePreviewFile();
+    void chooseReferenceFile();
+    void clearReferenceFile();
+    void chooseSourceFile();
+    void clearSourceFile();
     void playPreviewFile();
     void stopPreviewFile();
     void clearPreviewFile();
@@ -46,6 +50,8 @@ private:
     ResultDeckComponent resultDeck_;
     PreviewDeckComponent previewDeck_;
     std::unique_ptr<juce::FileChooser> previewChooser_;
+    std::unique_ptr<juce::FileChooser> referenceChooser_;
+    std::unique_ptr<juce::FileChooser> sourceChooser_;
     bool isSyncing_ = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ACEStepVST3AudioProcessorEditor)

@@ -14,12 +14,23 @@ void ACEStepVST3AudioProcessorEditor::configureLabels()
 void ACEStepVST3AudioProcessorEditor::configureEditors()
 {
     auto& backendEditor = synthPanel_.backendUrlEditor();
+    auto& modeBox = synthPanel_.modeBox();
     auto& promptEditor = synthPanel_.promptEditor();
     auto& lyricsEditor = synthPanel_.lyricsEditor();
+    auto& referenceAudioEditor = synthPanel_.referenceAudioEditor();
+    auto& sourceAudioEditor = synthPanel_.sourceAudioEditor();
+    auto& conditioningCodesEditor = synthPanel_.conditioningCodesEditor();
     auto& seedEditor = synthPanel_.seedEditor();
+    auto& coverStrengthSlider = synthPanel_.coverStrengthSlider();
 
     backendEditor.setTextToShowWhenEmpty(kDefaultBackendBaseUrl, juce::Colours::grey);
     backendEditor.onTextChange = [this] { persistTextFields(); };
+
+    modeBox.addItem(toString(WorkflowMode::text), 1);
+    modeBox.addItem(toString(WorkflowMode::reference), 2);
+    modeBox.addItem(toString(WorkflowMode::coverRemix), 3);
+    modeBox.addItem(toString(WorkflowMode::customConditioning), 4);
+    modeBox.onChange = [this] { persistTextFields(); };
 
     promptEditor.setTextToShowWhenEmpty("Describe the tape pass you want to print.",
                                         juce::Colours::grey);
@@ -29,8 +40,21 @@ void ACEStepVST3AudioProcessorEditor::configureEditors()
                                         juce::Colours::grey);
     lyricsEditor.onTextChange = [this] { persistTextFields(); };
 
+    referenceAudioEditor.setTextToShowWhenEmpty("Reference WAV or render path",
+                                                juce::Colours::grey);
+    referenceAudioEditor.onTextChange = [this] { persistTextFields(); };
+
+    sourceAudioEditor.setTextToShowWhenEmpty("Source audio path for cover/remix",
+                                             juce::Colours::grey);
+    sourceAudioEditor.onTextChange = [this] { persistTextFields(); };
+
+    conditioningCodesEditor.setTextToShowWhenEmpty("Semantic audio codes for custom mode",
+                                                   juce::Colours::grey);
+    conditioningCodesEditor.onTextChange = [this] { persistTextFields(); };
+
     seedEditor.setInputRestrictions(10, "0123456789");
     seedEditor.onTextChange = [this] { persistTextFields(); };
+    coverStrengthSlider.onValueChange = [this] { persistTextFields(); };
 }
 
 void ACEStepVST3AudioProcessorEditor::configureSelectors()
@@ -54,6 +78,10 @@ void ACEStepVST3AudioProcessorEditor::configureSelectors()
     durationBox.onChange = [this] { persistTextFields(); };
     modelBox.onChange = [this] { persistTextFields(); };
     qualityBox.onChange = [this] { persistTextFields(); };
+    synthPanel_.chooseReferenceButton().onClick = [this] { chooseReferenceFile(); };
+    synthPanel_.clearReferenceButton().onClick = [this] { clearReferenceFile(); };
+    synthPanel_.chooseSourceButton().onClick = [this] { chooseSourceFile(); };
+    synthPanel_.clearSourceButton().onClick = [this] { clearSourceFile(); };
     resultSlotBox.onChange = [this] {
         if (isSyncing_)
         {
@@ -79,14 +107,21 @@ void ACEStepVST3AudioProcessorEditor::syncFromProcessor()
     const auto& state = processor_.getState();
     isSyncing_ = true;
     synthPanel_.backendUrlEditor().setText(state.backendBaseUrl, juce::dontSendNotification);
+    synthPanel_.modeBox().setSelectedId(static_cast<int>(state.workflowMode) + 1,
+                                        juce::dontSendNotification);
     synthPanel_.promptEditor().setText(state.prompt, juce::dontSendNotification);
     synthPanel_.lyricsEditor().setText(state.lyrics, juce::dontSendNotification);
+    synthPanel_.referenceAudioEditor().setText(state.referenceAudioPath, juce::dontSendNotification);
+    synthPanel_.sourceAudioEditor().setText(state.sourceAudioPath, juce::dontSendNotification);
+    synthPanel_.conditioningCodesEditor().setText(state.customConditioningCodes,
+                                                  juce::dontSendNotification);
     synthPanel_.seedEditor().setText(juce::String(state.seed), juce::dontSendNotification);
     synthPanel_.durationBox().setSelectedId(state.durationSeconds, juce::dontSendNotification);
     synthPanel_.modelBox().setSelectedId(static_cast<int>(state.modelPreset) + 1,
                                          juce::dontSendNotification);
     synthPanel_.qualityBox().setSelectedId(static_cast<int>(state.qualityMode) + 1,
                                            juce::dontSendNotification);
+    synthPanel_.coverStrengthSlider().setValue(state.audioCoverStrength, juce::dontSendNotification);
     isSyncing_ = false;
 }
 
@@ -99,12 +134,17 @@ void ACEStepVST3AudioProcessorEditor::persistTextFields()
 
     auto& state = processor_.getMutableState();
     auto& backendEditor = synthPanel_.backendUrlEditor();
+    auto& modeBox = synthPanel_.modeBox();
     auto& promptEditor = synthPanel_.promptEditor();
     auto& lyricsEditor = synthPanel_.lyricsEditor();
+    auto& referenceAudioEditor = synthPanel_.referenceAudioEditor();
+    auto& sourceAudioEditor = synthPanel_.sourceAudioEditor();
+    auto& conditioningCodesEditor = synthPanel_.conditioningCodesEditor();
     auto& seedEditor = synthPanel_.seedEditor();
     auto& durationBox = synthPanel_.durationBox();
     auto& modelBox = synthPanel_.modelBox();
     auto& qualityBox = synthPanel_.qualityBox();
+    auto& coverStrengthSlider = synthPanel_.coverStrengthSlider();
 
     state.backendBaseUrl = backendEditor.getText().trim();
     if (state.backendBaseUrl.isEmpty())
@@ -113,11 +153,16 @@ void ACEStepVST3AudioProcessorEditor::persistTextFields()
         backendEditor.setText(state.backendBaseUrl, juce::dontSendNotification);
     }
 
+    state.workflowMode = static_cast<WorkflowMode>(juce::jmax(0, modeBox.getSelectedItemIndex()));
     state.prompt = promptEditor.getText();
     state.lyrics = lyricsEditor.getText();
+    state.referenceAudioPath = referenceAudioEditor.getText();
+    state.sourceAudioPath = sourceAudioEditor.getText();
+    state.customConditioningCodes = conditioningCodesEditor.getText();
     state.durationSeconds = durationBox.getSelectedId() == 0 ? kDefaultDurationSeconds
                                                              : durationBox.getSelectedId();
     state.seed = seedEditor.getText().getIntValue();
+    state.audioCoverStrength = coverStrengthSlider.getValue();
     if (state.seed <= 0)
     {
         state.seed = kDefaultSeed;
@@ -154,7 +199,7 @@ void ACEStepVST3AudioProcessorEditor::refreshStatusViews()
     const auto sessionName = state.prompt.trim().isEmpty() ? "UNTITLED SESSION"
                                                            : state.prompt.substring(0, 48).toUpperCase();
     statusStrip_.setSessionName("SESSION // " + sessionName);
-    statusStrip_.setModeName("TEXT MODE");
+    statusStrip_.setModeName(toString(state.workflowMode).toUpperCase() + " MODE");
     statusStrip_.setBackendStatus(state.backendStatus);
 
     auto transportMessage = state.progressText;

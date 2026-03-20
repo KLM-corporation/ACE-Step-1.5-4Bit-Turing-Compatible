@@ -8,7 +8,7 @@ namespace acestep::vst3
 namespace
 {
 constexpr int kEditorWidth = 1080;
-constexpr int kEditorHeight = 820;
+constexpr int kEditorHeight = 900;
 }  // namespace
 
 ACEStepVST3AudioProcessorEditor::ACEStepVST3AudioProcessorEditor(
@@ -53,7 +53,7 @@ void ACEStepVST3AudioProcessorEditor::resized()
     statusStrip_.setBounds(bounds.removeFromTop(96));
     bounds.removeFromTop(14);
 
-    auto upper = bounds.removeFromTop(400);
+    auto upper = bounds.removeFromTop(480);
     auto lower = bounds;
 
     auto synthBounds = upper.removeFromLeft((upper.getWidth() * 11) / 20);

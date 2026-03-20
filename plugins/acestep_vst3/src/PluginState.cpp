@@ -42,8 +42,12 @@ std::unique_ptr<juce::XmlElement> createStateXml(const PluginState& state)
     xml->setAttribute("backendBaseUrl", state.backendBaseUrl);
     xml->setAttribute("prompt", state.prompt);
     xml->setAttribute("lyrics", state.lyrics);
+    xml->setAttribute("referenceAudioPath", state.referenceAudioPath);
+    xml->setAttribute("sourceAudioPath", state.sourceAudioPath);
+    xml->setAttribute("customConditioningCodes", state.customConditioningCodes);
     xml->setAttribute("durationSeconds", state.durationSeconds);
     xml->setAttribute("seed", state.seed);
+    xml->setAttribute("audioCoverStrength", state.audioCoverStrength);
     xml->setAttribute("modelPreset", toString(state.modelPreset));
     xml->setAttribute("qualityMode", toString(state.qualityMode));
     xml->setAttribute("backendStatus", toString(state.backendStatus));
@@ -110,8 +114,12 @@ std::optional<PluginState> parseStateXml(const juce::XmlElement& xml)
     state.backendBaseUrl = xml.getStringAttribute("backendBaseUrl", kDefaultBackendBaseUrl).trim();
     state.prompt = xml.getStringAttribute("prompt");
     state.lyrics = xml.getStringAttribute("lyrics");
+    state.referenceAudioPath = xml.getStringAttribute("referenceAudioPath");
+    state.sourceAudioPath = xml.getStringAttribute("sourceAudioPath");
+    state.customConditioningCodes = xml.getStringAttribute("customConditioningCodes");
     state.durationSeconds = xml.getIntAttribute("durationSeconds", kDefaultDurationSeconds);
     state.seed = xml.getIntAttribute("seed", kDefaultSeed);
+    state.audioCoverStrength = xml.getDoubleAttribute("audioCoverStrength", 0.6);
     state.modelPreset = modelPresetFromString(xml.getStringAttribute("modelPreset"));
     state.qualityMode = qualityModeFromString(xml.getStringAttribute("qualityMode"));
     state.backendStatus = backendStatusFromString(xml.getStringAttribute("backendStatus"));

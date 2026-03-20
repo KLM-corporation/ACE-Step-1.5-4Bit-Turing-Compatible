@@ -157,6 +157,12 @@ int chooseInferenceSteps(QualityMode qualityMode)
     return 8;
 }
 
+bool modeNeedsPrompt(WorkflowMode mode)
+{
+    return mode == WorkflowMode::text || mode == WorkflowMode::reference
+           || mode == WorkflowMode::coverRemix;
+}
+
 juce::String chooseFileExtension(const juce::String& remoteFileUrl)
 {
     const auto decoded = juce::URL::removeEscapeChars(remoteFileUrl);
@@ -204,9 +210,10 @@ PluginGenerationStartResult PluginBackendClient::startGeneration(const PluginSta
     PluginGenerationStartResult result;
 
     juce::DynamicObject::Ptr payload = new juce::DynamicObject();
-    payload->setProperty("prompt", state.prompt);
+    payload->setProperty("prompt", modeNeedsPrompt(state.workflowMode) ? state.prompt : juce::String());
     payload->setProperty("lyrics", state.lyrics);
-    payload->setProperty("task_type", "text2music");
+    payload->setProperty("task_type",
+                         state.workflowMode == WorkflowMode::coverRemix ? "cover" : "text2music");
     payload->setProperty("audio_duration", state.durationSeconds);
     payload->setProperty("batch_size", 1);
     payload->setProperty("audio_format", "wav");
@@ -219,6 +226,27 @@ PluginGenerationStartResult PluginBackendClient::startGeneration(const PluginSta
     if (const auto modelName = chooseModelName(state.modelPreset); modelName.isNotEmpty())
     {
         payload->setProperty("model", modelName);
+    }
+
+    switch (state.workflowMode)
+    {
+        case WorkflowMode::text:
+            break;
+        case WorkflowMode::reference:
+            payload->setProperty("reference_audio_path", state.referenceAudioPath);
+            break;
+        case WorkflowMode::coverRemix:
+            payload->setProperty("src_audio_path", state.sourceAudioPath);
+            payload->setProperty("audio_cover_strength", state.audioCoverStrength);
+            if (state.referenceAudioPath.isNotEmpty())
+            {
+                payload->setProperty("reference_audio_path", state.referenceAudioPath);
+            }
+            break;
+        case WorkflowMode::customConditioning:
+            payload->setProperty("audio_code_string", state.customConditioningCodes);
+            payload->setProperty("audio_cover_strength", state.audioCoverStrength);
+            break;
     }
 
     juce::var response;
