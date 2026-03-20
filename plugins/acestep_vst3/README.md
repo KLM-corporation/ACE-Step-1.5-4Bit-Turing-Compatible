@@ -5,9 +5,18 @@ This directory contains the isolated JUCE/CMake scaffold for the ACE-Step VST3 M
 What it includes:
 
 - a VST3-only JUCE plugin target
-- placeholder editor UI
-- versioned plugin state persistence
+- state-driven MVP editor UI for prompt and job workflow
+- versioned plugin state persistence for the DAW project
 - no backend or generation calls yet
+
+The current UI persists:
+
+- backend URL
+- prompt and lyrics
+- duration and seed
+- model preset and quality mode
+- backend/job status selections
+- result slot labels and selected slot
 
 ## Build
 

@@ -127,26 +127,9 @@ const PluginState& ACEStepVST3AudioProcessor::getState() const noexcept
     return state_;
 }
 
-void ACEStepVST3AudioProcessor::setBackendBaseUrl(juce::String baseUrl)
+PluginState& ACEStepVST3AudioProcessor::getMutableState() noexcept
 {
-    baseUrl = baseUrl.trim();
-    if (baseUrl.isEmpty())
-    {
-        baseUrl = kDefaultBackendBaseUrl;
-    }
-
-    state_.backendBaseUrl = baseUrl;
-}
-
-void ACEStepVST3AudioProcessor::setSessionNote(juce::String note)
-{
-    state_.sessionNote = note.trim();
-}
-
-juce::String ACEStepVST3AudioProcessor::getShellStatusText() const
-{
-    return "VST3 shell ready. No backend calls are active yet. Backend target: "
-           + state_.backendBaseUrl;
+    return state_;
 }
 }  // namespace acestep::vst3
 

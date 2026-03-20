@@ -34,6 +34,9 @@ target_sources(
     acestep_vst3
     PRIVATE
         src/PluginEditor.cpp
+        src/PluginEditorState.cpp
+        src/PluginEnums.cpp
+        src/PluginMockGeneration.cpp
         src/PluginProcessor.cpp
         src/PluginState.cpp
 )

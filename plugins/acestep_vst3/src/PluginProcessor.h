@@ -37,9 +37,7 @@ public:
     void setStateInformation(const void* data, int sizeInBytes) override;
 
     const PluginState& getState() const noexcept;
-    void setBackendBaseUrl(juce::String baseUrl);
-    void setSessionNote(juce::String note);
-    juce::String getShellStatusText() const;
+    PluginState& getMutableState() noexcept;
 
 private:
     PluginState state_;

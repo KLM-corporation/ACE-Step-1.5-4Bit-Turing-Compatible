@@ -8,4 +8,7 @@ inline constexpr const char* kPluginVersion = "0.1.0";
 inline constexpr const char* kDefaultBackendBaseUrl = "http://localhost:8001";
 inline constexpr const char* kStateRootTag = "acestep_vst3_shell_state";
 inline constexpr int kCurrentStateVersion = 1;
+inline constexpr int kDefaultDurationSeconds = 30;
+inline constexpr int kDefaultSeed = 12345;
+inline constexpr int kResultSlotCount = 3;
 }  // namespace acestep::vst3

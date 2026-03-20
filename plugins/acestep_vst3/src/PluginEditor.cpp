@@ -1,13 +1,14 @@
 #include "PluginEditor.h"
 
+#include "PluginMockGeneration.h"
 #include "PluginProcessor.h"
 
 namespace acestep::vst3
 {
 namespace
 {
-constexpr int kEditorWidth = 480;
-constexpr int kEditorHeight = 260;
+constexpr int kEditorWidth = 720;
+constexpr int kEditorHeight = 640;
 }  // namespace
 
 ACEStepVST3AudioProcessorEditor::ACEStepVST3AudioProcessorEditor(
@@ -15,56 +16,12 @@ ACEStepVST3AudioProcessorEditor::ACEStepVST3AudioProcessorEditor(
     : juce::AudioProcessorEditor(&processor), processor_(processor)
 {
     setSize(kEditorWidth, kEditorHeight);
-
-    titleLabel_.setText("ACE-Step VST3 Shell", juce::dontSendNotification);
-    titleLabel_.setJustificationType(juce::Justification::centredLeft);
-    titleLabel_.setFont(juce::Font(20.0f, juce::Font::bold));
-    addAndMakeVisible(titleLabel_);
-
-    subtitleLabel_.setText("Placeholder editor. No backend calls or generation logic yet.",
-                           juce::dontSendNotification);
-    subtitleLabel_.setJustificationType(juce::Justification::centredLeft);
-    addAndMakeVisible(subtitleLabel_);
-
-    statusLabel_.setJustificationType(juce::Justification::centredLeft);
-    addAndMakeVisible(statusLabel_);
-
-    backendLabel_.setText("Backend URL", juce::dontSendNotification);
-    addAndMakeVisible(backendLabel_);
-
-    backendEditor_.setTextToShowWhenEmpty(kDefaultBackendBaseUrl, juce::Colours::grey);
-    backendEditor_.setMultiLine(false);
-    backendEditor_.setReturnKeyStartsNewLine(false);
-    backendEditor_.onTextChange = [this] {
-        if (isSyncingFields_)
-        {
-            return;
-        }
-
-        processor_.setBackendBaseUrl(backendEditor_.getText());
-        updateStatusText();
-    };
-    addAndMakeVisible(backendEditor_);
-
-    noteLabel_.setText("Session note", juce::dontSendNotification);
-    addAndMakeVisible(noteLabel_);
-
-    noteEditor_.setTextToShowWhenEmpty("Saved with the DAW project", juce::Colours::grey);
-    noteEditor_.setMultiLine(false);
-    noteEditor_.setReturnKeyStartsNewLine(false);
-    noteEditor_.onTextChange = [this] {
-        if (isSyncingFields_)
-        {
-            return;
-        }
-
-        processor_.setSessionNote(noteEditor_.getText());
-        updateStatusText();
-    };
-    addAndMakeVisible(noteEditor_);
-
+    configureLabels();
+    configureEditors();
+    configureSelectors();
     syncFromProcessor();
-    updateStatusText();
+    refreshResultSelector();
+    refreshStatusViews();
 }
 
 ACEStepVST3AudioProcessorEditor::~ACEStepVST3AudioProcessorEditor() = default;
@@ -72,43 +29,91 @@ ACEStepVST3AudioProcessorEditor::~ACEStepVST3AudioProcessorEditor() = default;
 void ACEStepVST3AudioProcessorEditor::paint(juce::Graphics& g)
 {
     g.fillAll(juce::Colour::fromRGB(18, 22, 32));
+    g.setColour(juce::Colour::fromRGB(44, 54, 74));
+    g.drawRoundedRectangle(getLocalBounds().toFloat().reduced(12.0f), 12.0f, 1.5f);
 }
 
 void ACEStepVST3AudioProcessorEditor::resized()
 {
-    auto bounds = getLocalBounds().reduced(18);
-    auto topRow = bounds.removeFromTop(70);
-    titleLabel_.setBounds(topRow.removeFromTop(28));
-    subtitleLabel_.setBounds(topRow.removeFromTop(20).translated(0, 4));
+    auto bounds = getLocalBounds().reduced(20);
+    auto header = bounds.removeFromTop(56);
+    titleLabel_.setBounds(header.removeFromTop(28));
+    subtitleLabel_.setBounds(header.removeFromTop(20));
 
-    bounds.removeFromTop(6);
-    statusLabel_.setBounds(bounds.removeFromTop(24));
+    auto top = bounds.removeFromTop(168);
+    auto left = top.removeFromLeft(top.getWidth() / 2).reduced(0, 4);
+    auto right = top.reduced(0, 4);
 
-    bounds.removeFromTop(12);
-    backendLabel_.setBounds(bounds.removeFromTop(20));
-    backendEditor_.setBounds(bounds.removeFromTop(28));
+    backendUrlLabel_.setBounds(left.removeFromTop(18));
+    backendUrlEditor_.setBounds(left.removeFromTop(28));
+    left.removeFromTop(8);
+    promptLabel_.setBounds(left.removeFromTop(18));
+    promptEditor_.setBounds(left.removeFromTop(44));
+    left.removeFromTop(8);
+    lyricsLabel_.setBounds(left.removeFromTop(18));
+    promptEditor_.setBounds(promptEditor_.getBounds());
+    lyricsEditor_.setBounds(left.removeFromTop(44));
 
-    bounds.removeFromTop(10);
-    noteLabel_.setBounds(bounds.removeFromTop(20));
-    noteEditor_.setBounds(bounds.removeFromTop(28));
+    durationLabel_.setBounds(right.removeFromTop(18));
+    durationBox_.setBounds(right.removeFromTop(28));
+    right.removeFromTop(8);
+    seedLabel_.setBounds(right.removeFromTop(18));
+    seedEditor_.setBounds(right.removeFromTop(28));
+    right.removeFromTop(8);
+    modelLabel_.setBounds(right.removeFromTop(18));
+    modelBox_.setBounds(right.removeFromTop(28));
+    right.removeFromTop(8);
+    qualityLabel_.setBounds(right.removeFromTop(18));
+    qualityBox_.setBounds(right.removeFromTop(28));
+
+    auto statusArea = bounds.removeFromTop(156);
+    auto statusLeft = statusArea.removeFromLeft(statusArea.getWidth() / 2).reduced(0, 4);
+    auto statusRight = statusArea.reduced(0, 4);
+
+    backendStatusTitle_.setBounds(statusLeft.removeFromTop(18));
+    backendStatusBox_.setBounds(statusLeft.removeFromTop(28));
+    statusLeft.removeFromTop(8);
+    backendStatusValue_.setBounds(statusLeft.removeFromTop(40));
+    statusLeft.removeFromTop(8);
+    jobStatusTitle_.setBounds(statusLeft.removeFromTop(18));
+    jobStatusValue_.setBounds(statusLeft.removeFromTop(40));
+
+    errorTitle_.setBounds(statusRight.removeFromTop(18));
+    errorValue_.setBounds(statusRight.removeFromTop(94));
+    statusRight.removeFromTop(10);
+    generateButton_.setBounds(statusRight.removeFromTop(30).removeFromLeft(180));
+
+    bounds.removeFromTop(8);
+    resultsLabel_.setBounds(bounds.removeFromTop(18));
+    resultSlotBox_.setBounds(bounds.removeFromTop(28));
 }
 
-void ACEStepVST3AudioProcessorEditor::syncFromProcessor()
+void ACEStepVST3AudioProcessorEditor::timerCallback()
 {
-    const auto& state = processor_.getState();
-    isSyncingFields_ = true;
-    backendEditor_.setText(state.backendBaseUrl, juce::dontSendNotification);
-    noteEditor_.setText(state.sessionNote, juce::dontSendNotification);
-    isSyncingFields_ = false;
+    auto& state = processor_.getMutableState();
+    ++mockGenerationPhase_;
+    advanceMockGeneration(state, mockGenerationPhase_);
+    refreshResultSelector();
+    refreshStatusViews();
+    if (state.jobStatus == JobStatus::succeeded)
+    {
+        stopTimer();
+        mockGenerationPhase_ = -1;
+    }
 }
 
-void ACEStepVST3AudioProcessorEditor::updateStatusText()
+void ACEStepVST3AudioProcessorEditor::startMockGeneration()
 {
-    auto status = processor_.getShellStatusText();
-    status += "\nState schema version: ";
-    status += juce::String(processor_.getState().schemaVersion);
-    status += "\nSession note length: ";
-    status += juce::String(processor_.getState().sessionNote.length());
-    statusLabel_.setText(status, juce::dontSendNotification);
+    stopTimer();
+    mockGenerationPhase_ = -1;
+    persistTextFields();
+    auto& state = processor_.getMutableState();
+    if (!beginMockGeneration(state))
+    {
+        refreshStatusViews();
+        return;
+    }
+    refreshStatusViews();
+    startTimer(650);
 }
 }  // namespace acestep::vst3
