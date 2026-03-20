@@ -7,10 +7,11 @@ namespace acestep::vst3
 {
 void ACEStepVST3AudioProcessorEditor::configureLabels()
 {
-    titleLabel_.setText("ACE-Step VST3 MVP UI", juce::dontSendNotification);
-    titleLabel_.setFont(juce::Font(20.0f, juce::Font::bold));
-    subtitleLabel_.setText("State-driven prompt, job, and result workflow shell.",
+    titleLabel_.setText("ACE-STEP", juce::dontSendNotification);
+    titleLabel_.setFont(juce::Font(juce::FontOptions(32.0f, juce::Font::bold)));
+    subtitleLabel_.setText("Generative instrument for DAW composition and preview playback.",
                            juce::dontSendNotification);
+    subtitleLabel_.setFont(juce::Font(juce::FontOptions(14.0f, juce::Font::plain)));
 
     for (auto* label : {&titleLabel_, &subtitleLabel_, &backendUrlLabel_, &promptLabel_,
                         &lyricsLabel_, &durationLabel_, &seedLabel_, &modelLabel_,
@@ -22,31 +23,60 @@ void ACEStepVST3AudioProcessorEditor::configureLabels()
         addAndMakeVisible(*label);
     }
 
-    backendUrlLabel_.setText("Backend URL", juce::dontSendNotification);
+    titleLabel_.setColour(juce::Label::textColourId, juce::Colour::fromRGB(236, 227, 212));
+    subtitleLabel_.setColour(juce::Label::textColourId, juce::Colour::fromRGB(176, 163, 147));
+
+    for (auto* label : {&backendUrlLabel_, &promptLabel_, &lyricsLabel_, &durationLabel_,
+                        &seedLabel_, &modelLabel_, &qualityLabel_, &backendStatusTitle_,
+                        &jobStatusTitle_, &errorTitle_, &resultsLabel_, &previewTitle_})
+    {
+        label->setFont(juce::Font(juce::FontOptions(13.0f, juce::Font::bold)));
+        label->setColour(juce::Label::textColourId, juce::Colour::fromRGB(197, 185, 167));
+    }
+
+    for (auto* label : {&backendStatusValue_, &jobStatusValue_, &previewValue_})
+    {
+        label->setFont(juce::Font(juce::FontOptions(14.0f, juce::Font::plain)));
+        label->setColour(juce::Label::textColourId, juce::Colour::fromRGB(228, 219, 207));
+    }
+
+    backendUrlLabel_.setText("Signal path", juce::dontSendNotification);
     promptLabel_.setText("Prompt", juce::dontSendNotification);
     lyricsLabel_.setText("Lyrics", juce::dontSendNotification);
     durationLabel_.setText("Duration", juce::dontSendNotification);
     seedLabel_.setText("Seed", juce::dontSendNotification);
-    modelLabel_.setText("Model preset", juce::dontSendNotification);
-    qualityLabel_.setText("Quality mode", juce::dontSendNotification);
-    backendStatusTitle_.setText("Backend status", juce::dontSendNotification);
-    jobStatusTitle_.setText("Job status", juce::dontSendNotification);
-    errorTitle_.setText("Error state", juce::dontSendNotification);
-    resultsLabel_.setText("Result slot selection", juce::dontSendNotification);
-    previewTitle_.setText("Preview and file handoff", juce::dontSendNotification);
-    errorValue_.setColour(juce::Label::textColourId, juce::Colours::lightsalmon);
+    modelLabel_.setText("Engine", juce::dontSendNotification);
+    qualityLabel_.setText("Quality", juce::dontSendNotification);
+    backendStatusTitle_.setText("Backend", juce::dontSendNotification);
+    jobStatusTitle_.setText("Render status", juce::dontSendNotification);
+    errorTitle_.setText("Warnings", juce::dontSendNotification);
+    resultsLabel_.setText("Selected take", juce::dontSendNotification);
+    previewTitle_.setText("Preview deck", juce::dontSendNotification);
+    errorValue_.setColour(juce::Label::textColourId, juce::Colour::fromRGB(232, 160, 112));
+    errorValue_.setFont(juce::Font(juce::FontOptions(14.0f, juce::Font::plain)));
 }
 
 void ACEStepVST3AudioProcessorEditor::configureEditors()
 {
+    backendUrlEditor_.setFont(juce::Font(juce::FontOptions(15.0f, juce::Font::plain)));
     backendUrlEditor_.setTextToShowWhenEmpty(kDefaultBackendBaseUrl, juce::Colours::grey);
+    backendUrlEditor_.setIndents(12, 10);
     backendUrlEditor_.onTextChange = [this] { persistTextFields(); };
+
+    promptEditor_.setFont(juce::Font(juce::FontOptions(15.0f, juce::Font::plain)));
     promptEditor_.setTextToShowWhenEmpty("Describe the song idea", juce::Colours::grey);
+    promptEditor_.setIndents(12, 10);
     promptEditor_.onTextChange = [this] { persistTextFields(); };
+
+    lyricsEditor_.setFont(juce::Font(juce::FontOptions(15.0f, juce::Font::plain)));
     lyricsEditor_.setTextToShowWhenEmpty("Optional lyric sketch", juce::Colours::grey);
     lyricsEditor_.setMultiLine(true);
+    lyricsEditor_.setIndents(12, 10);
     lyricsEditor_.onTextChange = [this] { persistTextFields(); };
+
+    seedEditor_.setFont(juce::Font(juce::FontOptions(15.0f, juce::Font::plain)));
     seedEditor_.setInputRestrictions(10, "0123456789");
+    seedEditor_.setIndents(12, 10);
     seedEditor_.onTextChange = [this] { persistTextFields(); };
 
     for (auto* editor : {&backendUrlEditor_, &promptEditor_, &lyricsEditor_, &seedEditor_})
@@ -59,35 +89,36 @@ void ACEStepVST3AudioProcessorEditor::configureSelectors()
 {
     for (const auto duration : {10, 30, 60, 120})
     {
-        durationBox_.addItem(juce::String(duration) + " seconds", duration);
+        durationBox_.addItem(juce::String(duration) + " SEC", duration);
     }
-    modelBox_.addItem(toString(ModelPreset::turbo), 1);
-    modelBox_.addItem(toString(ModelPreset::standard), 2);
-    modelBox_.addItem(toString(ModelPreset::quality), 3);
-    qualityBox_.addItem(toString(QualityMode::fast), 1);
-    qualityBox_.addItem(toString(QualityMode::balanced), 2);
-    qualityBox_.addItem(toString(QualityMode::high), 3);
+    modelBox_.addItem("Turbo", 1);
+    modelBox_.addItem("Standard", 2);
+    modelBox_.addItem("Quality", 3);
+    qualityBox_.addItem("Fast", 1);
+    qualityBox_.addItem("Balanced", 2);
+    qualityBox_.addItem("Detailed", 3);
     backendStatusBox_.addItem(toString(BackendStatus::ready), 1);
     backendStatusBox_.addItem(toString(BackendStatus::offline), 2);
     backendStatusBox_.addItem(toString(BackendStatus::degraded), 3);
+    backendStatusBox_.setEnabled(false);
+    generateButton_.setClickingTogglesState(false);
 
     durationBox_.onChange = [this] { persistTextFields(); };
     modelBox_.onChange = [this] { persistTextFields(); };
     qualityBox_.onChange = [this] { persistTextFields(); };
-    backendStatusBox_.onChange = [this] {
-        persistTextFields();
-        refreshStatusViews();
-    };
     resultSlotBox_.onChange = [this] {
         if (isSyncing_)
         {
             return;
         }
-        processor_.getMutableState().selectedResultSlot =
-            juce::jmax(0, resultSlotBox_.getSelectedItemIndex());
+        processor_.selectResultSlot(juce::jmax(0, resultSlotBox_.getSelectedItemIndex()));
         refreshStatusViews();
     };
-    generateButton_.onClick = [this] { startMockGeneration(); };
+    generateButton_.onClick = [this] {
+        persistTextFields();
+        processor_.requestGeneration();
+        refreshStatusViews();
+    };
     choosePreviewButton_.onClick = [this] { choosePreviewFile(); };
     playPreviewButton_.onClick = [this] { playPreviewFile(); };
     stopPreviewButton_.onClick = [this] { stopPreviewFile(); };
@@ -155,8 +186,6 @@ void ACEStepVST3AudioProcessorEditor::persistTextFields()
 
     state.modelPreset = static_cast<ModelPreset>(juce::jmax(0, modelBox_.getSelectedItemIndex()));
     state.qualityMode = static_cast<QualityMode>(juce::jmax(0, qualityBox_.getSelectedItemIndex()));
-    state.backendStatus =
-        static_cast<BackendStatus>(juce::jmax(0, backendStatusBox_.getSelectedItemIndex()));
     refreshStatusViews();
 }
 
@@ -181,11 +210,14 @@ void ACEStepVST3AudioProcessorEditor::refreshResultSelector()
 void ACEStepVST3AudioProcessorEditor::refreshStatusViews()
 {
     const auto& state = processor_.getState();
+    backendStatusBox_.setSelectedId(static_cast<int>(state.backendStatus) + 1,
+                                    juce::dontSendNotification);
     backendStatusValue_.setText(
-        "Target: " + state.backendBaseUrl + "\nStatus: " + toString(state.backendStatus),
+        "Target  " + state.backendBaseUrl + "\nState    " + toString(state.backendStatus),
         juce::dontSendNotification);
-    jobStatusValue_.setText("State: " + toString(state.jobStatus) + "\nSelected slot: "
-                                + juce::String(state.selectedResultSlot + 1),
+    jobStatusValue_.setText("Job      " + toString(state.jobStatus) + "\nTake     "
+                                + juce::String(state.selectedResultSlot + 1) + "\nMessage  "
+                                + (state.progressText.isEmpty() ? "Idle" : state.progressText),
                             juce::dontSendNotification);
     errorValue_.setText(state.errorMessage.isEmpty() ? "No active error." : state.errorMessage,
                         juce::dontSendNotification);
@@ -196,8 +228,12 @@ void ACEStepVST3AudioProcessorEditor::refreshStatusViews()
                                                    : state.previewFilePath;
     if (processor_.isPreviewPlaying())
     {
-        previewText += "\nPlayback: active";
+        previewText += "\nDeck: playback active";
     }
     previewValue_.setText(previewText, juce::dontSendNotification);
+    generateButton_.setEnabled(state.jobStatus != JobStatus::submitting
+                               && state.jobStatus != JobStatus::queuedOrRunning);
+    generateButton_.setButtonText(state.jobStatus == JobStatus::queuedOrRunning ? "Rendering..."
+                                                                                : "Generate");
 }
 }  // namespace acestep::vst3

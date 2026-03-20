@@ -137,6 +137,24 @@ PluginState& ACEStepVST3AudioProcessor::getMutableState() noexcept
     return state_;
 }
 
+void ACEStepVST3AudioProcessor::requestGeneration()
+{
+    if (state_.prompt.trim().isEmpty())
+    {
+        state_.jobStatus = JobStatus::failed;
+        state_.progressText = {};
+        state_.errorMessage = "Prompt is required before generation.";
+        return;
+    }
+
+    clearGeneratedResults();
+    stopPreview();
+    clearPreviewFile();
+    state_.jobStatus = JobStatus::submitting;
+    state_.progressText = "Submitting request...";
+    state_.errorMessage = {};
+}
+
 bool ACEStepVST3AudioProcessor::loadPreviewFile(const juce::File& file)
 {
     juce::String errorMessage;
@@ -190,6 +208,257 @@ bool ACEStepVST3AudioProcessor::hasPreviewFile() const
 bool ACEStepVST3AudioProcessor::isPreviewPlaying() const
 {
     return preview_.isPlaying();
+}
+
+void ACEStepVST3AudioProcessor::selectResultSlot(int index)
+{
+    state_.selectedResultSlot = juce::jlimit(0, kResultSlotCount - 1, index);
+    const auto& localPath = state_.resultLocalPaths[static_cast<size_t>(state_.selectedResultSlot)];
+    if (localPath.isNotEmpty())
+    {
+        [[maybe_unused]] const auto loaded = loadPreviewFile(juce::File(localPath));
+    }
+}
+
+void ACEStepVST3AudioProcessor::pumpBackendWorkflow()
+{
+    std::optional<BackendTaskResult> completedTask;
+    {
+        const juce::ScopedLock lock(backendTaskLock_);
+        if (completedBackendTask_.has_value())
+        {
+            completedTask = std::move(completedBackendTask_);
+            completedBackendTask_.reset();
+        }
+    }
+
+    if (completedTask.has_value())
+    {
+        applyCompletedTask(*completedTask);
+    }
+
+    if (backendTaskRunning_.load())
+    {
+        return;
+    }
+
+    if (pendingPreviewDownloadSlot_.has_value())
+    {
+        schedulePreviewDownload(*pendingPreviewDownloadSlot_);
+        pendingPreviewDownloadSlot_.reset();
+        return;
+    }
+
+    const auto now = juce::Time::getMillisecondCounter();
+    if (state_.jobStatus == JobStatus::submitting)
+    {
+        scheduleGenerationStart();
+        return;
+    }
+
+    if (state_.jobStatus == JobStatus::queuedOrRunning && state_.currentTaskId.isNotEmpty()
+        && now - lastPollRequestAtMs_ >= 1500)
+    {
+        scheduleGenerationPoll();
+        return;
+    }
+
+    if (state_.jobStatus == JobStatus::idle || state_.jobStatus == JobStatus::failed
+        || state_.jobStatus == JobStatus::succeeded)
+    {
+        if (lastHealthCheckedBaseUrl_ != state_.backendBaseUrl || now - lastHealthCheckAtMs_ >= 5000)
+        {
+            scheduleHealthCheck();
+        }
+    }
+}
+
+void ACEStepVST3AudioProcessor::scheduleHealthCheck()
+{
+    if (backendTaskRunning_.exchange(true))
+    {
+        return;
+    }
+
+    lastHealthCheckedBaseUrl_ = state_.backendBaseUrl;
+    lastHealthCheckAtMs_ = juce::Time::getMillisecondCounter();
+    const auto baseUrl = state_.backendBaseUrl;
+    backendThreadPool_.addJob(std::function<juce::ThreadPoolJob::JobStatus()>([this, baseUrl]() {
+        BackendTaskResult taskResult;
+        taskResult.kind = BackendTaskKind::healthCheck;
+        taskResult.health = backendClient_.checkHealth(baseUrl);
+        const juce::ScopedLock lock(backendTaskLock_);
+        completedBackendTask_ = std::move(taskResult);
+        backendTaskRunning_.store(false);
+        return juce::ThreadPoolJob::jobHasFinished;
+    }));
+}
+
+void ACEStepVST3AudioProcessor::scheduleGenerationStart()
+{
+    if (backendTaskRunning_.exchange(true))
+    {
+        return;
+    }
+
+    const auto stateSnapshot = state_;
+    backendThreadPool_.addJob(std::function<juce::ThreadPoolJob::JobStatus()>([this, stateSnapshot]() {
+        BackendTaskResult taskResult;
+        taskResult.kind = BackendTaskKind::submitGeneration;
+        taskResult.generationStart = backendClient_.startGeneration(stateSnapshot);
+        const juce::ScopedLock lock(backendTaskLock_);
+        completedBackendTask_ = std::move(taskResult);
+        backendTaskRunning_.store(false);
+        return juce::ThreadPoolJob::jobHasFinished;
+    }));
+}
+
+void ACEStepVST3AudioProcessor::scheduleGenerationPoll()
+{
+    if (backendTaskRunning_.exchange(true))
+    {
+        return;
+    }
+
+    const auto baseUrl = state_.backendBaseUrl;
+    const auto taskId = state_.currentTaskId;
+    lastPollRequestAtMs_ = juce::Time::getMillisecondCounter();
+    backendThreadPool_.addJob(std::function<juce::ThreadPoolJob::JobStatus()>([this, baseUrl, taskId]() {
+        BackendTaskResult taskResult;
+        taskResult.kind = BackendTaskKind::pollGeneration;
+        taskResult.generationPoll = backendClient_.pollGeneration(baseUrl, taskId);
+        const juce::ScopedLock lock(backendTaskLock_);
+        completedBackendTask_ = std::move(taskResult);
+        backendTaskRunning_.store(false);
+        return juce::ThreadPoolJob::jobHasFinished;
+    }));
+}
+
+void ACEStepVST3AudioProcessor::schedulePreviewDownload(int slotIndex)
+{
+    if (backendTaskRunning_.exchange(true))
+    {
+        pendingPreviewDownloadSlot_ = slotIndex;
+        return;
+    }
+
+    const auto baseUrl = state_.backendBaseUrl;
+    const auto remoteFileUrl = state_.resultFileUrls[static_cast<size_t>(slotIndex)];
+    backendThreadPool_.addJob(std::function<juce::ThreadPoolJob::JobStatus()>(
+        [this, baseUrl, remoteFileUrl, slotIndex]() {
+        BackendTaskResult taskResult;
+        taskResult.kind = BackendTaskKind::downloadPreview;
+        taskResult.previewDownload =
+            backendClient_.downloadPreviewFile(baseUrl, remoteFileUrl, slotIndex);
+        const juce::ScopedLock lock(backendTaskLock_);
+        completedBackendTask_ = std::move(taskResult);
+        backendTaskRunning_.store(false);
+        return juce::ThreadPoolJob::jobHasFinished;
+    }));
+}
+
+void ACEStepVST3AudioProcessor::applyCompletedTask(const BackendTaskResult& taskResult)
+{
+    switch (taskResult.kind)
+    {
+        case BackendTaskKind::healthCheck:
+            state_.backendStatus = taskResult.health.status;
+            if (taskResult.health.status == BackendStatus::ready
+                && state_.jobStatus != JobStatus::failed)
+            {
+                state_.errorMessage = {};
+            }
+            else if (taskResult.health.status != BackendStatus::ready
+                     && state_.jobStatus == JobStatus::idle)
+            {
+                state_.errorMessage = taskResult.health.errorMessage;
+            }
+            return;
+        case BackendTaskKind::submitGeneration:
+            if (!taskResult.generationStart.succeeded)
+            {
+                state_.jobStatus = JobStatus::failed;
+                state_.progressText = {};
+                state_.errorMessage = taskResult.generationStart.errorMessage;
+                state_.currentTaskId = {};
+                return;
+            }
+
+            state_.backendStatus = BackendStatus::ready;
+            state_.jobStatus = JobStatus::queuedOrRunning;
+            state_.currentTaskId = taskResult.generationStart.taskId;
+            state_.progressText = "Task started: " + state_.currentTaskId;
+            state_.errorMessage = {};
+            return;
+        case BackendTaskKind::pollGeneration:
+            state_.jobStatus = taskResult.generationPoll.status;
+            state_.progressText = taskResult.generationPoll.progressText;
+            if (taskResult.generationPoll.status == JobStatus::failed)
+            {
+                state_.errorMessage = taskResult.generationPoll.errorMessage;
+                state_.currentTaskId = {};
+                return;
+            }
+
+            if (taskResult.generationPoll.status != JobStatus::succeeded)
+            {
+                return;
+            }
+
+            state_.currentTaskId = {};
+            state_.errorMessage = {};
+            for (int index = 0; index < kResultSlotCount; ++index)
+            {
+                const auto& slot = taskResult.generationPoll.resultSlots[static_cast<size_t>(index)];
+                state_.resultSlots[static_cast<size_t>(index)] = slot.label;
+                state_.resultFileUrls[static_cast<size_t>(index)] = slot.remoteFileUrl;
+            }
+            state_.selectedResultSlot = 0;
+            if (state_.resultFileUrls[0].isNotEmpty())
+            {
+                pendingPreviewDownloadSlot_ = 0;
+            }
+            else
+            {
+                state_.errorMessage = "Task finished but no audio file was returned.";
+            }
+            return;
+        case BackendTaskKind::downloadPreview:
+            if (!taskResult.previewDownload.succeeded)
+            {
+                state_.errorMessage = taskResult.previewDownload.errorMessage;
+                return;
+            }
+
+            if (taskResult.previewDownload.slotIndex >= 0
+                && taskResult.previewDownload.slotIndex < kResultSlotCount)
+            {
+                const auto slotIndex = static_cast<size_t>(taskResult.previewDownload.slotIndex);
+                state_.resultLocalPaths[slotIndex] = taskResult.previewDownload.localFilePath;
+                if (state_.selectedResultSlot == taskResult.previewDownload.slotIndex)
+                {
+                    [[maybe_unused]] const auto loaded =
+                        loadPreviewFile(juce::File(taskResult.previewDownload.localFilePath));
+                }
+            }
+            return;
+        case BackendTaskKind::none:
+            return;
+    }
+}
+
+void ACEStepVST3AudioProcessor::clearGeneratedResults()
+{
+    state_.currentTaskId = {};
+    state_.progressText = {};
+    state_.selectedResultSlot = 0;
+    pendingPreviewDownloadSlot_.reset();
+    for (int index = 0; index < kResultSlotCount; ++index)
+    {
+        state_.resultSlots[static_cast<size_t>(index)] = {};
+        state_.resultFileUrls[static_cast<size_t>(index)] = {};
+        state_.resultLocalPaths[static_cast<size_t>(index)] = {};
+    }
 }
 
 void ACEStepVST3AudioProcessor::syncPreviewFromState()

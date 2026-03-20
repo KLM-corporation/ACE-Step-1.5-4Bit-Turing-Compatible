@@ -38,6 +38,7 @@ target_sources(
         src/PluginEditor.cpp
         src/PluginEditorState.cpp
         src/PluginEditorPreview.cpp
+        src/PluginBackendClient.cpp
         src/PluginEnums.cpp
         src/PluginMockGeneration.cpp
         src/PluginPreview.cpp

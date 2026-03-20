@@ -25,7 +25,6 @@ private:
     void persistTextFields();
     void refreshResultSelector();
     void refreshStatusViews();
-    void startMockGeneration();
     void choosePreviewFile();
     void playPreviewFile();
     void stopPreviewFile();
@@ -66,9 +65,9 @@ private:
     juce::TextButton stopPreviewButton_ {"Stop"};
     juce::TextButton clearPreviewButton_ {"Clear"};
     juce::TextButton revealPreviewButton_ {"Reveal File"};
+    std::unique_ptr<juce::LookAndFeel_V4> lookAndFeel_;
     std::unique_ptr<juce::FileChooser> previewChooser_;
     bool isSyncing_ = false;
-    int mockGenerationPhase_ = -1;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ACEStepVST3AudioProcessorEditor)
 };
