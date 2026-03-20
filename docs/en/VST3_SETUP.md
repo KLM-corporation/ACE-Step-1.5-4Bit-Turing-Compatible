@@ -1,22 +1,22 @@
 # ACE-Step VST3 Setup and Validation
 
 This guide documents the current ACE-Step VST3 MVP workflow, including contributor build steps,
-backend setup expectations, user-facing behavior, and the validation matrix for the draft plugin
-shell.
+backend setup expectations, user-facing behavior, and the validation matrix for the current draft
+plugin implementation.
 
 ## Current MVP Scope
 
-The current VST3 draft implementation is intentionally narrow:
+The current VST3 MVP implementation is intentionally narrow:
 
 - isolated JUCE/CMake VST3 shell
-- state-driven plugin UI for prompt, lyrics, duration, seed, preset, and quality mode
+- plugin UI for prompt, lyrics, duration, seed, preset, and quality mode
 - persisted plugin state across DAW reopen
-- local preview-file playback
+- backend health check, task submission, and polling
+- generated-preview download and playback
 - reveal-file handoff through the host operating system
 
 The following items are explicitly deferred:
 
-- direct backend requests from the plugin
 - reference-audio workflows
 - repaint/edit workflows
 - drag-and-drop into the DAW timeline
@@ -58,22 +58,28 @@ Default local endpoint:
 
 - `http://localhost:8001`
 
-The current draft plugin UI persists the backend URL and status state, but it does not yet make
-live API calls. Backend reachability and generation state are currently represented through the MVP
-UI shell and mock job-state flow.
+The plugin makes live backend requests for:
+
+- `GET /health`
+- `POST /release_task`
+- `POST /query_result`
+
+The backend must already be running before the plugin is opened. Auto-launch and backend lifecycle
+management are not part of the MVP.
 
 ## Current User Workflow
 
-In the current draft implementation:
+In the current MVP implementation:
 
 1. Open the plugin inside a supported VST3 host.
 2. Enter prompt, lyrics, duration, seed, preset, and quality mode.
-3. Set the backend URL and backend status in the UI shell.
-4. Trigger the mock generation flow to exercise state transitions.
-5. Load a local preview audio file.
-6. Play, stop, clear, or reveal the preview file from the plugin UI.
+3. Confirm the backend URL points to a running ACE-Step backend.
+4. Trigger generation from the plugin.
+5. Wait for submission, queued/running, and completion states to resolve through live polling.
+6. Preview the downloaded result audio inside the plugin.
+7. Play, stop, clear, or reveal the preview file from the plugin UI.
 
-The preview path is intentionally local-file based. Drag-and-drop into the DAW timeline is deferred
+The reveal-file path is intentionally file based. Drag-and-drop into the DAW timeline is deferred
 for MVP stability.
 
 ## Validation Matrix
@@ -81,21 +87,22 @@ for MVP stability.
 | Area | Target | Current status | Notes |
 |------|--------|----------------|-------|
 | Plugin shell build | Windows | Pending manual validation | Build instructions are present; no Windows validation was run in this environment |
-| Plugin shell build | macOS | Blocked locally | Local configure attempt was blocked by missing Xcode command line tools |
+| Plugin shell build | macOS | Implemented | Local build succeeded in this workspace after command line tools were installed |
 | Host load | Reaper (Windows) | Pending manual validation | This is the default Windows validation host for the MVP |
-| Host load | Reaper (macOS) | Pending manual validation | This is the default macOS validation host for the MVP |
-| State persistence | DAW save/reopen | Implemented, pending host validation | Prompt, lyrics, controls, result slots, and preview metadata are serialized |
-| Backend offline UX | Plugin UI shell | Implemented | Currently state-driven, not based on real API requests |
-| Prompt/job workflow | Plugin UI shell | Implemented | Mock submission, queued/running, success, and failure states are present |
-| Preview playback | Local file playback | Implemented, pending host validation | Uses processor-owned JUCE transport primitives |
+| Host load | Reaper (macOS) | Implemented | Plugin shell was loaded in Reaper on macOS in this workspace |
+| State persistence | DAW save/reopen | Implemented, pending broader host validation | Prompt, lyrics, controls, result slots, backend metadata, and preview metadata are serialized |
+| Backend offline UX | Live backend health check | Implemented | Uses real `/health` requests and visible error/status messaging |
+| Prompt/job workflow | Live backend task flow | Implemented | Uses `/release_task` and `/query_result` with submission, queued/running, success, and failure states |
+| Preview playback | Downloaded result playback | Implemented, pending host validation | Generated output is downloaded to a local cache file and played through JUCE transport primitives |
 | File handoff | Reveal file in OS | Implemented, pending host validation | Uses file-based handoff; drag-and-drop is deferred |
 
 ## Known Limitations
 
-- The current plugin branch is a shell, not a real backend-integrated generator yet
-- Local validation in this workspace is limited by missing Xcode command line tools
+- The plugin depends on an already-running ACE-Step backend
 - No plugin CI pipeline is active yet
-- Preview currently relies on a user-selected local audio file rather than backend-generated output
+- The editor timer currently drives backend polling, so generation workflow should be exercised with
+  the plugin UI open
+- Windows host validation is still pending
 - Drag-and-drop into the DAW timeline is intentionally out of scope for this milestone
 
 ## Tracking
@@ -104,5 +111,5 @@ This guide corresponds to the VST3 umbrella issue and its current child issues:
 
 - `#890` umbrella tracker
 - `#893` plugin shell
-- `#894` plugin UI shell
+- `#894` plugin UI and backend job state
 - `#895` preview playback and file handoff
