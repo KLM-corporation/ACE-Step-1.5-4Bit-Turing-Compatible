@@ -4,6 +4,26 @@
 
 namespace acestep::vst3
 {
+namespace
+{
+juce::String withLoadedAssetName(const juce::String& label, const juce::TextEditor& editor)
+{
+    const auto path = editor.getText().trim();
+    if (path.isEmpty())
+    {
+        return label;
+    }
+
+    const auto fileName = juce::File(path).getFileName();
+    if (fileName.isEmpty())
+    {
+        return label;
+    }
+
+    return label + " // " + fileName;
+}
+}  // namespace
+
 SynthPanelComponent::SynthPanelComponent()
 {
     for (auto* label : {&backendUrlLabel_, &promptLabel_, &lyricsLabel_, &modeLabel_,
@@ -88,6 +108,13 @@ void SynthPanelComponent::resized()
     const auto labelHeight = 18;
     const auto fieldHeight = 32;
 
+    referenceAudioLabel_.setText(withLoadedAssetName("Reference Audio", referenceAudioEditor_),
+                                 juce::dontSendNotification);
+    sourceAudioLabel_.setText(withLoadedAssetName("Source Audio", sourceAudioEditor_),
+                              juce::dontSendNotification);
+    loraPathLabel_.setText(withLoadedAssetName("LoRA Path", loraPathEditor_),
+                           juce::dontSendNotification);
+
     backendUrlLabel_.setBounds(left.removeFromTop(labelHeight));
     backendUrlEditor_.setBounds(left.removeFromTop(fieldHeight));
     left.removeFromTop(8);
@@ -95,60 +122,67 @@ void SynthPanelComponent::resized()
     modeBox_.setBounds(left.removeFromTop(fieldHeight));
     left.removeFromTop(8);
     promptLabel_.setBounds(left.removeFromTop(labelHeight));
-    promptEditor_.setBounds(left.removeFromTop(72));
+    promptEditor_.setBounds(left.removeFromTop(88));
     left.removeFromTop(8);
     lyricsLabel_.setBounds(left.removeFromTop(labelHeight));
-    lyricsEditor_.setBounds(left.removeFromTop(90));
+    lyricsEditor_.setBounds(left.removeFromTop(118));
+
+    auto topParamLabels = right.removeFromTop(labelHeight);
+    durationLabel_.setBounds(topParamLabels.removeFromLeft(right.getWidth() / 2 - 8));
+    topParamLabels.removeFromLeft(16);
+    seedLabel_.setBounds(topParamLabels);
+    auto topParamFields = right.removeFromTop(fieldHeight);
+    durationBox_.setBounds(topParamFields.removeFromLeft(right.getWidth() / 2 - 8));
+    topParamFields.removeFromLeft(16);
+    seedEditor_.setBounds(topParamFields);
+    right.removeFromTop(8);
+    auto lowerParamLabels = right.removeFromTop(labelHeight);
+    modelLabel_.setBounds(lowerParamLabels.removeFromLeft(right.getWidth() / 2 - 8));
+    lowerParamLabels.removeFromLeft(16);
+    qualityLabel_.setBounds(lowerParamLabels);
+    auto lowerParamFields = right.removeFromTop(fieldHeight);
+    modelBox_.setBounds(lowerParamFields.removeFromLeft(right.getWidth() / 2 - 8));
+    lowerParamFields.removeFromLeft(16);
+    qualityBox_.setBounds(lowerParamFields);
+    right.removeFromTop(12);
 
     referenceAudioLabel_.setBounds(right.removeFromTop(labelHeight));
-    referenceAudioEditor_.setBounds(right.removeFromTop(fieldHeight));
-    auto referenceButtons = right.removeFromTop(26);
-    chooseReferenceButton_.setBounds(referenceButtons.removeFromLeft(82));
+    referenceAudioEditor_.setBounds(right.removeFromTop(28));
+    auto referenceButtons = right.removeFromTop(28);
+    chooseReferenceButton_.setBounds(referenceButtons.removeFromLeft(92));
     referenceButtons.removeFromLeft(8);
-    clearReferenceButton_.setBounds(referenceButtons.removeFromLeft(70));
+    clearReferenceButton_.setBounds(referenceButtons.removeFromLeft(78));
     right.removeFromTop(8);
     sourceAudioLabel_.setBounds(right.removeFromTop(labelHeight));
-    sourceAudioEditor_.setBounds(right.removeFromTop(fieldHeight));
-    auto sourceButtons = right.removeFromTop(26);
-    chooseSourceButton_.setBounds(sourceButtons.removeFromLeft(82));
+    sourceAudioEditor_.setBounds(right.removeFromTop(28));
+    auto sourceButtons = right.removeFromTop(28);
+    chooseSourceButton_.setBounds(sourceButtons.removeFromLeft(92));
     sourceButtons.removeFromLeft(8);
-    clearSourceButton_.setBounds(sourceButtons.removeFromLeft(70));
+    clearSourceButton_.setBounds(sourceButtons.removeFromLeft(78));
     right.removeFromTop(8);
     conditioningCodesLabel_.setBounds(right.removeFromTop(labelHeight));
-    conditioningCodesEditor_.setBounds(right.removeFromTop(52));
+    conditioningCodesEditor_.setBounds(right.removeFromTop(64));
     right.removeFromTop(8);
     coverStrengthLabel_.setBounds(right.removeFromTop(labelHeight));
     coverStrengthSlider_.setBounds(right.removeFromTop(24));
     right.removeFromTop(8);
     loraPathLabel_.setBounds(right.removeFromTop(labelHeight));
-    loraPathEditor_.setBounds(right.removeFromTop(fieldHeight));
+    loraPathEditor_.setBounds(right.removeFromTop(28));
     right.removeFromTop(8);
     loraAdapterLabel_.setBounds(right.removeFromTop(labelHeight));
     loraAdapterBox_.setBounds(right.removeFromTop(fieldHeight));
     right.removeFromTop(8);
     auto loraControlRow = right.removeFromTop(30);
-    useLoRAToggle_.setBounds(loraControlRow.removeFromLeft(168));
+    useLoRAToggle_.setBounds(loraControlRow.removeFromLeft(176));
     loraControlRow.removeFromLeft(10);
-    loadLoRAButton_.setBounds(loraControlRow.removeFromLeft(84));
+    loadLoRAButton_.setBounds(loraControlRow.removeFromLeft(76));
     loraControlRow.removeFromLeft(8);
-    unloadLoRAButton_.setBounds(loraControlRow.removeFromLeft(92));
+    unloadLoRAButton_.setBounds(loraControlRow.removeFromLeft(84));
     right.removeFromTop(8);
     loraScaleLabel_.setBounds(right.removeFromTop(labelHeight));
     loraScaleSlider_.setBounds(right.removeFromTop(26));
     right.removeFromTop(6);
-    loraStatusLabel_.setBounds(right.removeFromTop(38));
-    right.removeFromTop(8);
-    durationLabel_.setBounds(right.removeFromTop(labelHeight));
-    durationBox_.setBounds(right.removeFromTop(fieldHeight));
-    right.removeFromTop(8);
-    seedLabel_.setBounds(right.removeFromTop(labelHeight));
-    seedEditor_.setBounds(right.removeFromTop(fieldHeight));
-    right.removeFromTop(8);
-    modelLabel_.setBounds(right.removeFromTop(labelHeight));
-    modelBox_.setBounds(right.removeFromTop(fieldHeight));
-    right.removeFromTop(8);
-    qualityLabel_.setBounds(right.removeFromTop(labelHeight));
-    qualityBox_.setBounds(right.removeFromTop(fieldHeight));
+    loraStatusLabel_.setBounds(right.removeFromTop(30));
 }
 
 juce::TextEditor& SynthPanelComponent::backendUrlEditor() noexcept { return backendUrlEditor_; }

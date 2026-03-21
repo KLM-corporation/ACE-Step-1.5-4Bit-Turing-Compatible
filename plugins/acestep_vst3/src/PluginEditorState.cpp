@@ -6,6 +6,21 @@
 
 namespace acestep::vst3
 {
+namespace
+{
+juce::String formatFileSummary(const juce::String& prefix, const juce::String& path)
+{
+    if (path.isEmpty())
+    {
+        return prefix + " // none";
+    }
+
+    const auto file = juce::File(path);
+    const auto name = file.getFileName();
+    return name.isEmpty() ? prefix + " // linked" : prefix + " // " + name;
+}
+}  // namespace
+
 void ACEStepVST3AudioProcessorEditor::configureLabels()
 {
     refreshStatusViews();
@@ -372,11 +387,13 @@ void ACEStepVST3AudioProcessorEditor::refreshStatusViews()
     const auto& remoteUrl = state.resultFileUrls[static_cast<size_t>(state.selectedResultSlot)];
     if (!localPath.isEmpty())
     {
-        takeDetail += "\nLOCAL // " + localPath;
+        takeDetail += "\n" + formatFileSummary("LOCAL", localPath);
+        takeDetail += "\nPATH // " + localPath;
     }
     else if (!remoteUrl.isEmpty())
     {
-        takeDetail += "\nREMOTE // " + remoteUrl;
+        takeDetail += "\nREMOTE // ready on backend";
+        takeDetail += "\nURL // " + remoteUrl;
     }
     resultDeck_.setTakeSummary(takeTitle, takeDetail);
 
@@ -411,8 +428,9 @@ void ACEStepVST3AudioProcessorEditor::refreshStatusViews()
     auto previewText = state.previewDisplayName.isEmpty() ? "No preview file loaded."
                                                           : "Loaded // " + state.previewDisplayName;
     previewText += "\n";
-    previewText += state.previewFilePath.isEmpty() ? "Choose a local or generated file to preview."
-                                                   : state.previewFilePath;
+    previewText += state.previewFilePath.isEmpty()
+                       ? "Choose a local or generated file to preview."
+                       : formatFileSummary("PATH", state.previewFilePath) + "\n" + state.previewFilePath;
     if (processor_.isPreviewPlaying())
     {
         previewText += "\nPlayback // active";

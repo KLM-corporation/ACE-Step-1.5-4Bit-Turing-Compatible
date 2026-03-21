@@ -46,7 +46,9 @@ void CompositionLaneComponent::resized()
     area.removeFromTop(24);
 
     auto left = area.removeFromLeft(area.getWidth() / 2);
+    left.removeFromRight(6);
     auto right = area;
+    right.removeFromLeft(6);
     const auto labelHeight = 18;
     const auto fieldHeight = 32;
 
@@ -54,17 +56,18 @@ void CompositionLaneComponent::resized()
     projectNameEditor_.setBounds(left.removeFromTop(fieldHeight));
     left.removeFromTop(10);
     sectionPlanLabel_.setBounds(left.removeFromTop(labelHeight));
-    sectionPlanEditor_.setBounds(left.removeFromTop(84));
+    sectionPlanEditor_.setBounds(left.removeFromTop(94));
     left.removeFromTop(10);
     chordProgressionLabel_.setBounds(left.removeFromTop(labelHeight));
-    chordProgressionEditor_.setBounds(left.removeFromTop(54));
+    chordProgressionEditor_.setBounds(left.removeFromTop(44));
 
     exportNotesLabel_.setBounds(right.removeFromTop(labelHeight));
-    exportNotesEditor_.setBounds(right.removeFromTop(138));
+    exportNotesEditor_.setBounds(right.removeFromTop(154));
     right.removeFromTop(10);
-    exportStatusLabel_.setBounds(right.removeFromTop(28));
-    right.removeFromTop(12);
-    exportButton_.setBounds(right.removeFromTop(34).removeFromLeft(160));
+    auto exportFooter = right.removeFromTop(34);
+    exportStatusLabel_.setBounds(exportFooter.removeFromLeft(right.getWidth() - 176));
+    exportFooter.removeFromLeft(16);
+    exportButton_.setBounds(exportFooter.removeFromLeft(160));
 }
 
 juce::TextEditor& CompositionLaneComponent::projectNameEditor() noexcept

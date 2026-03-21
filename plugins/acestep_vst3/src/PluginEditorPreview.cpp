@@ -11,6 +11,11 @@ constexpr auto kAudioFileFilter = "*.wav;*.aiff;*.flac;*.ogg;*.mp3";
 
 void ACEStepVST3AudioProcessorEditor::choosePreviewFile()
 {
+    if (previewChooser_ != nullptr)
+    {
+        return;
+    }
+
     previewChooser_ = std::make_unique<juce::FileChooser>("Select preview audio file",
                                                           juce::File(),
                                                           kAudioFileFilter);
@@ -32,6 +37,11 @@ void ACEStepVST3AudioProcessorEditor::choosePreviewFile()
 
 void ACEStepVST3AudioProcessorEditor::chooseReferenceFile()
 {
+    if (referenceChooser_ != nullptr)
+    {
+        return;
+    }
+
     referenceChooser_ = std::make_unique<juce::FileChooser>("Select reference audio file",
                                                             juce::File(),
                                                             kAudioFileFilter);
@@ -59,6 +69,11 @@ void ACEStepVST3AudioProcessorEditor::clearReferenceFile()
 
 void ACEStepVST3AudioProcessorEditor::chooseSourceFile()
 {
+    if (sourceChooser_ != nullptr)
+    {
+        return;
+    }
+
     sourceChooser_ = std::make_unique<juce::FileChooser>("Select source audio file",
                                                          juce::File(),
                                                          kAudioFileFilter);
@@ -86,6 +101,11 @@ void ACEStepVST3AudioProcessorEditor::clearSourceFile()
 
 void ACEStepVST3AudioProcessorEditor::chooseSessionExportFile()
 {
+    if (exportChooser_ != nullptr)
+    {
+        return;
+    }
+
     persistTextFields();
     exportChooser_ = std::make_unique<juce::FileChooser>("Export session summary",
                                                          juce::File("ace-step-session.txt"),

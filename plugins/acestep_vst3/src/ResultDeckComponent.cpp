@@ -41,24 +41,27 @@ void ResultDeckComponent::resized()
     resultLabel_.setBounds(area.removeFromTop(18));
     resultSelector_.setBounds(area.removeFromTop(32));
     area.removeFromTop(10);
-    summaryLabel_.setBounds(area.removeFromTop(58));
+    summaryLabel_.setBounds(area.removeFromTop(52));
     area.removeFromTop(8);
 
-    auto compareRow = area.removeFromTop(26);
-    comparePrimaryLabel_.setBounds(compareRow.removeFromLeft(72));
-    comparePrimarySelector_.setBounds(compareRow.removeFromLeft(160));
-    compareRow.removeFromLeft(8);
-    cueCompareAButton_.setBounds(compareRow.removeFromLeft(70));
-    compareRow.removeFromLeft(12);
-    compareSecondaryLabel_.setBounds(compareRow.removeFromLeft(72));
-    compareSecondarySelector_.setBounds(compareRow.removeFromLeft(160));
-    compareRow.removeFromLeft(8);
-    cueCompareBButton_.setBounds(compareRow.removeFromLeft(70));
-    compareRow.removeFromLeft(12);
-    toggleCompareButton_.setBounds(compareRow.removeFromLeft(104));
+    auto comparePrimaryRow = area.removeFromTop(26);
+    comparePrimaryLabel_.setBounds(comparePrimaryRow.removeFromLeft(84));
+    comparePrimarySelector_.setBounds(comparePrimaryRow.removeFromLeft(240));
+    comparePrimaryRow.removeFromLeft(10);
+    cueCompareAButton_.setBounds(comparePrimaryRow.removeFromLeft(84));
 
     area.removeFromTop(8);
-    compareSummaryLabel_.setBounds(area.removeFromTop(22));
+    auto compareSecondaryRow = area.removeFromTop(26);
+    compareSecondaryLabel_.setBounds(compareSecondaryRow.removeFromLeft(84));
+    compareSecondarySelector_.setBounds(compareSecondaryRow.removeFromLeft(240));
+    compareSecondaryRow.removeFromLeft(10);
+    cueCompareBButton_.setBounds(compareSecondaryRow.removeFromLeft(84));
+
+    area.removeFromTop(10);
+    auto compareFooter = area.removeFromTop(28);
+    toggleCompareButton_.setBounds(compareFooter.removeFromLeft(116));
+    compareFooter.removeFromLeft(12);
+    compareSummaryLabel_.setBounds(compareFooter);
 }
 
 juce::ComboBox& ResultDeckComponent::resultSelector() noexcept { return resultSelector_; }

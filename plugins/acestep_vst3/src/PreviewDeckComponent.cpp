@@ -19,26 +19,43 @@ void PreviewDeckComponent::paint(juce::Graphics& g)
 {
     v2::drawModule(g, getLocalBounds(), "Preview Deck", v2::kAccentMint);
 
-    auto waveformZone = getLocalBounds().reduced(22).removeFromTop(24);
-    juce::ignoreUnused(waveformZone);
+    auto waveformZone = getLocalBounds().reduced(22);
+    waveformZone.removeFromTop(34);
+    waveformZone.removeFromBottom(56);
+    g.setColour(v2::kModuleRaised.withAlpha(0.55f));
+    g.fillRoundedRectangle(waveformZone.toFloat(), 12.0f);
+    g.setColour(v2::kModuleStroke.withAlpha(0.9f));
+    g.drawRoundedRectangle(waveformZone.toFloat(), 12.0f, 1.0f);
+
+    auto lane = waveformZone.reduced(16, 18);
+    g.setColour(v2::kAccentMint.withAlpha(0.18f));
+    for (int index = 0; index < 18; ++index)
+    {
+        const auto x = lane.getX() + index * (lane.getWidth() / 18);
+        const auto height = 10 + ((index % 5) * 8);
+        g.fillRoundedRectangle(
+            juce::Rectangle<float>(static_cast<float>(x), static_cast<float>(lane.getCentreY() - height / 2), 8.0f,
+                                   static_cast<float>(height)),
+            3.0f);
+    }
 }
 
 void PreviewDeckComponent::resized()
 {
     auto area = getLocalBounds().reduced(18);
     area.removeFromTop(24);
-    summaryLabel_.setBounds(area.removeFromTop(78));
-    area.removeFromTop(12);
+    summaryLabel_.setBounds(area.removeFromTop(84));
+    area.removeFromTop(20);
     auto buttons = area.removeFromTop(36);
-    loadButton_.setBounds(buttons.removeFromLeft(150));
+    loadButton_.setBounds(buttons.removeFromLeft(148));
     buttons.removeFromLeft(8);
-    playButton_.setBounds(buttons.removeFromLeft(80));
+    playButton_.setBounds(buttons.removeFromLeft(92));
     buttons.removeFromLeft(8);
-    stopButton_.setBounds(buttons.removeFromLeft(80));
+    stopButton_.setBounds(buttons.removeFromLeft(92));
     buttons.removeFromLeft(8);
-    clearButton_.setBounds(buttons.removeFromLeft(80));
+    clearButton_.setBounds(buttons.removeFromLeft(92));
     buttons.removeFromLeft(8);
-    revealButton_.setBounds(buttons.removeFromLeft(120));
+    revealButton_.setBounds(buttons.removeFromLeft(136));
 }
 
 juce::TextButton& PreviewDeckComponent::loadButton() noexcept { return loadButton_; }
