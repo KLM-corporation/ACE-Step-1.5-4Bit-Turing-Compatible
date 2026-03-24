@@ -8,8 +8,7 @@ This UI:
 - Talks to the same REST API (`/release_task`, `/query_result`)
 - Does not change model behavior
 
-For the plugin-oriented contract and status mapping, see
-[VST3 Backend Contract](./VST3_BACKEND_CONTRACT.md).
+For the standalone VST3 plugin, see [acestep.vst3](https://github.com/ace-step/acestep.vst3).
 
 ## How to use
 
