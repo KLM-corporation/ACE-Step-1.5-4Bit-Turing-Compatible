@@ -164,7 +164,7 @@ def build_generation_setup(
         bpm=bpm,
         keyscale=key_scale,
         timesignature=time_signature,
-        duration=audio_duration if audio_duration else _API_DEFAULT_DURATION_SECONDS,
+        duration=audio_duration if (audio_duration and audio_duration > 0) else _API_DEFAULT_DURATION_SECONDS,
         inference_steps=req.inference_steps,
         seed=req.seed,
         guidance_scale=req.guidance_scale,

@@ -205,6 +205,30 @@ class ApiDefaultDurationTests(unittest.TestCase):
         )
         self.assertEqual(setup.params.duration, _API_DEFAULT_DURATION_SECONDS)
 
+    def test_negative_duration_gets_default(self):
+        """Negative duration (-1) should fall back to API default (issue #929)."""
+        setup = build_generation_setup(
+            req=self._base_req(),
+            caption="cap",
+            lyrics="lyr",
+            bpm=None,
+            key_scale="",
+            time_signature="",
+            audio_duration=-1.0,
+            thinking=False,
+            sample_mode=False,
+            format_has_duration=False,
+            use_cot_caption=False,
+            use_cot_language=False,
+            lm_top_k=0,
+            lm_top_p=0.9,
+            parse_timesteps=lambda _: None,
+            is_instrumental=lambda _: False,
+            default_dit_instruction="default instruction",
+            task_instructions={},
+        )
+        self.assertEqual(setup.params.duration, _API_DEFAULT_DURATION_SECONDS)
+
     def test_explicit_duration_preserved(self):
         """When audio_duration is explicitly set, it should be preserved."""
         setup = build_generation_setup(
