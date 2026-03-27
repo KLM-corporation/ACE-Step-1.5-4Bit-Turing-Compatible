@@ -7,23 +7,43 @@ import resource
 import torch
 from loguru import logger
 
-# Set mmap threshold once at import time so large allocs use mmap and are
-# returned to the OS immediately on free — critical for CPU-offload workflows.
+# Cached libc handle for mallopt/malloc_trim calls (Linux only).
+_LIBC = None
 _MALLOPT_APPLIED = False
 
 
+def _get_libc():
+    """Return a cached ctypes handle to libc.so.6 (Linux only)."""
+    global _LIBC
+    if _LIBC is None and platform.system() == "Linux":
+        try:
+            import ctypes
+            _LIBC = ctypes.CDLL("libc.so.6")
+        except Exception:
+            pass
+    return _LIBC
+
+
 def _apply_malloc_mmap_threshold() -> None:
-    """Set glibc M_MMAP_THRESHOLD to 64 KB so large freed blocks go back to OS."""
+    """Set glibc M_MMAP_THRESHOLD to 128 KB so large freed blocks go back to OS.
+
+    This is a process-wide setting that affects all libraries.  128 KB is
+    chosen as a compromise: large enough to avoid excessive mmap/munmap
+    syscall overhead for moderate allocations, yet small enough that
+    PyTorch tensor storage freed during CPU-offload is returned to the OS
+    promptly instead of being retained in the glibc arena.
+    """
     global _MALLOPT_APPLIED
     if _MALLOPT_APPLIED or platform.system() != "Linux":
         return
+    libc = _get_libc()
+    if libc is None:
+        return
     try:
-        import ctypes
-        libc = ctypes.CDLL("libc.so.6")
-        # M_MMAP_THRESHOLD = -3; 64 KB threshold forces mmap for large allocs
-        libc.mallopt(-3, 65536)
+        # M_MMAP_THRESHOLD = -3; 128 KB threshold
+        libc.mallopt(-3, 131072)
         _MALLOPT_APPLIED = True
-        logger.debug("[memory] Set M_MMAP_THRESHOLD=65536 for immediate OS reclaim of large frees")
+        logger.debug("[memory] Set M_MMAP_THRESHOLD=131072 for immediate OS reclaim of large frees")
     except Exception as exc:
         logger.debug("[memory] mallopt not available: {}", exc)
 
@@ -164,10 +184,9 @@ class InitServiceMemoryBasicMixin:
         """
         gc.collect()
         self._empty_cache()
-        if platform.system() == "Linux":
+        libc = _get_libc()
+        if libc is not None:
             try:
-                import ctypes
-                libc = ctypes.CDLL("libc.so.6")
                 libc.malloc_trim(0)
             except Exception:
                 pass

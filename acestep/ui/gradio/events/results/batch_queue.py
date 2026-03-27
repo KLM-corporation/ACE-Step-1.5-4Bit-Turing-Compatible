@@ -54,11 +54,16 @@ def store_batch_in_queue(
                 # Offload to CPU to free VRAM; data is preserved for potential re-scoring.
                 old_extra[k] = v.cpu()
 
-    # Delete extra_outputs from batches 2+ generations behind to prevent
+    # Delete large tensors from batches 2+ generations behind to prevent
     # unbounded RAM accumulation (each generation's tensors are ~4-8 GB).
+    # Non-tensor metadata (e.g. lm_metadata, time_costs) is preserved so
+    # that batch navigation and display still work for older batches.
     for old_idx in list(batch_queue.keys()):
-        if old_idx < batch_index - 1 and batch_queue[old_idx].get("extra_outputs"):
-            batch_queue[old_idx]["extra_outputs"] = {}
+        if old_idx < batch_index - 1:
+            old_extra = batch_queue[old_idx].get("extra_outputs", {})
+            for k in list(old_extra.keys()):
+                if isinstance(old_extra[k], torch.Tensor):
+                    del old_extra[k]
 
     batch_queue[batch_index] = {
         "status": status,

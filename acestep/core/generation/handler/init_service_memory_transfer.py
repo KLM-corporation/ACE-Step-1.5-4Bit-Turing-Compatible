@@ -40,6 +40,9 @@ class InitServiceMemoryTransferMixin:
             if buf is not None and not self._is_on_target_device(buf, target_device):
                 module._buffers[buf_name] = buf.to(target_device)
 
+        # Note: only traverses registered submodules (_modules).  Modules stored
+        # as plain object attributes (not via add_module / __setattr__) will not
+        # be visited.  Standard PyTorch modules register children automatically.
         for _, child in module._modules.items():
             if child is not None:
                 self._move_module_recursive(child, target_device, dtype, visited)

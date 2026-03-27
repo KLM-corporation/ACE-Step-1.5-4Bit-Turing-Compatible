@@ -49,11 +49,11 @@ class InitServiceOffloadContextMixin:
         if model_name == "model" and hasattr(self, "silence_latent"):
             self.silence_latent = self.silence_latent.to(self.device).to(self.dtype)
 
-        # Free old CPU tensor storage after moving to GPU
-        self._release_system_memory()
-
         load_time = time.time() - start_time
         self.current_offload_cost += load_time
+
+        # Free old CPU tensor storage after moving to GPU (not counted in load_time)
+        self._release_system_memory()
         rss_after = self._get_rss_mb()
         logger.info(
             f"[_load_model_context] Loaded {model_name} to {self.device} in {load_time:.4f}s "
@@ -73,11 +73,12 @@ class InitServiceOffloadContextMixin:
             else:
                 self._recursive_to_device(model, "cpu")
 
-            # Aggressively reclaim memory: GPU cache + Python GC + OS heap trim
-            self._release_system_memory()
-
             offload_time = time.time() - start_time
             self.current_offload_cost += offload_time
+
+            # Aggressively reclaim memory: GPU cache + Python GC + OS heap trim
+            # (not counted in offload_time to keep timing accurate)
+            self._release_system_memory()
             rss_after = self._get_rss_mb()
             logger.info(
                 f"[_load_model_context] Offloaded {model_name} to CPU in {offload_time:.4f}s "
