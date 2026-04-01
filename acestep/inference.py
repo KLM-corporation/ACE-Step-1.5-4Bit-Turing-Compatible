@@ -175,7 +175,7 @@ class GenerationParams:
     def __post_init__(self):
         """Validate and clamp parameters to safe ranges."""
         from acestep.constants import (
-            BPM_MIN, BPM_MAX, DURATION_MIN, DURATION_MAX,
+            BPM_MIN, BPM_MAX, DURATION_MAX,
             TASK_TYPES, VALID_TIME_SIGNATURES,
         )
 
@@ -224,11 +224,11 @@ class GenerationParams:
             )
             self.guidance_scale = 20.0
 
-        if self.duration > 0 and self.duration < DURATION_MIN:
+        if self.duration > 0 and self.duration < 1.0:
             logger.warning(
-                "duration={:.1f}s is below minimum, clamping to {}s.", self.duration, DURATION_MIN,
+                "duration={:.1f}s is below minimum, clamping to 1s.", self.duration,
             )
-            self.duration = float(DURATION_MIN)
+            self.duration = 1.0
         elif self.duration > DURATION_MAX:
             logger.warning(
                 "duration={:.1f}s exceeds maximum, clamping to {}s.", self.duration, DURATION_MAX,
