@@ -220,7 +220,12 @@ class GenerationParams:
             )
             self.guidance_scale = 20.0
 
-        if self.duration > 0 and self.duration < 1.0:
+        if self.duration == 0.0:
+            logger.warning(
+                "duration=0.0 is not valid (use -1 for auto), resetting to auto (-1).",
+            )
+            self.duration = -1.0
+        elif 0 < self.duration < 1.0:
             logger.warning(
                 "duration={:.1f}s is below minimum, clamping to 1s.", self.duration,
             )
@@ -259,6 +264,12 @@ class GenerationParams:
                 )
                 self.timesignature = ""
 
+        if self.shift <= 0.0:
+            logger.warning(
+                "shift={:.3f} is invalid (must be > 0), clamping to 0.1.", self.shift,
+            )
+            self.shift = 0.1
+
         self.audio_cover_strength = max(0.0, min(1.0, self.audio_cover_strength))
         self.cover_noise_strength = max(0.0, min(1.0, self.cover_noise_strength))
         self.cfg_interval_start = max(0.0, min(1.0, self.cfg_interval_start))
@@ -269,6 +280,13 @@ class GenerationParams:
                 self.cfg_interval_start, self.cfg_interval_end,
             )
             self.cfg_interval_start, self.cfg_interval_end = self.cfg_interval_end, self.cfg_interval_start
+
+        if self.repainting_end >= 0 and self.repainting_start > self.repainting_end:
+            logger.warning(
+                "repainting_start={:.2f} > repainting_end={:.2f}, swapping to restore valid window.",
+                self.repainting_start, self.repainting_end,
+            )
+            self.repainting_start, self.repainting_end = self.repainting_end, self.repainting_start
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert config to dictionary for JSON serialization."""
