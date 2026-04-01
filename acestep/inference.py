@@ -173,10 +173,24 @@ class GenerationParams:
     cot_lyrics: str = ""
 
     def __post_init__(self):
-        """Validate sampler parameters."""
+        """Validate and clamp parameters to safe ranges."""
+        from acestep.constants import (
+            BPM_MIN, BPM_MAX, DURATION_MIN, DURATION_MAX,
+            TASK_TYPES, VALID_TIME_SIGNATURES,
+        )
+
+        # --- Hard validation (raise on truly invalid values) ---
         if self.sampler_mode not in ("euler", "heun"):
             raise ValueError(
                 f"Invalid sampler_mode '{self.sampler_mode}'. Must be 'euler' or 'heun'."
+            )
+        if self.infer_method not in ("ode", "sde"):
+            raise ValueError(
+                f"Invalid infer_method '{self.infer_method}'. Must be 'ode' or 'sde'."
+            )
+        if self.task_type not in TASK_TYPES:
+            raise ValueError(
+                f"Invalid task_type '{self.task_type}'. Must be one of {TASK_TYPES}."
             )
         if self.velocity_norm_threshold < 0:
             raise ValueError(
@@ -186,6 +200,73 @@ class GenerationParams:
             raise ValueError(
                 f"velocity_ema_factor must be in [0, 1.0], got {self.velocity_ema_factor}"
             )
+
+        # --- Soft clamping (clamp to safe range with warning) ---
+        if self.inference_steps < 1:
+            logger.warning(
+                "inference_steps={} is invalid, clamping to 1.", self.inference_steps,
+            )
+            self.inference_steps = 1
+        elif self.inference_steps > 200:
+            logger.warning(
+                "inference_steps={} exceeds maximum, clamping to 200.", self.inference_steps,
+            )
+            self.inference_steps = 200
+
+        if self.guidance_scale < 0.0:
+            logger.warning(
+                "guidance_scale={:.2f} is negative, clamping to 0.0.", self.guidance_scale,
+            )
+            self.guidance_scale = 0.0
+        elif self.guidance_scale > 20.0:
+            logger.warning(
+                "guidance_scale={:.2f} exceeds maximum, clamping to 20.0.", self.guidance_scale,
+            )
+            self.guidance_scale = 20.0
+
+        if self.duration > 0 and self.duration < DURATION_MIN:
+            logger.warning(
+                "duration={:.1f}s is below minimum, clamping to {}s.", self.duration, DURATION_MIN,
+            )
+            self.duration = float(DURATION_MIN)
+        elif self.duration > DURATION_MAX:
+            logger.warning(
+                "duration={:.1f}s exceeds maximum, clamping to {}s.", self.duration, DURATION_MAX,
+            )
+            self.duration = float(DURATION_MAX)
+
+        if self.bpm is not None:
+            if self.bpm < BPM_MIN:
+                logger.warning(
+                    "bpm={} is below minimum, clamping to {}.", self.bpm, BPM_MIN,
+                )
+                self.bpm = BPM_MIN
+            elif self.bpm > BPM_MAX:
+                logger.warning(
+                    "bpm={} exceeds maximum, clamping to {}.", self.bpm, BPM_MAX,
+                )
+                self.bpm = BPM_MAX
+
+        if self.timesignature and self.timesignature not in ("", "auto"):
+            try:
+                ts_int = int(self.timesignature)
+                if ts_int not in VALID_TIME_SIGNATURES:
+                    logger.warning(
+                        "timesignature={} is invalid (valid: {}), resetting to auto.",
+                        self.timesignature, VALID_TIME_SIGNATURES,
+                    )
+                    self.timesignature = ""
+            except (ValueError, TypeError):
+                logger.warning(
+                    "timesignature='{}' is not a valid integer, resetting to auto.",
+                    self.timesignature,
+                )
+                self.timesignature = ""
+
+        self.audio_cover_strength = max(0.0, min(1.0, self.audio_cover_strength))
+        self.cover_noise_strength = max(0.0, min(1.0, self.cover_noise_strength))
+        self.cfg_interval_start = max(0.0, min(1.0, self.cfg_interval_start))
+        self.cfg_interval_end = max(0.0, min(1.0, self.cfg_interval_end))
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert config to dictionary for JSON serialization."""
