@@ -1866,6 +1866,15 @@ class AceStepConditionGenerationModel(AceStepPreTrainedModel):
         velocity_ema_factor: float = 0.0,
         **kwargs,
     ):
+        # Backward-compat: accept the old misspelled key "diffusion_guidance_sale"
+        # so that callers that have not yet updated their code still work correctly.
+        if "diffusion_guidance_sale" in kwargs:
+            logger.warning(
+                "generate_audio() received deprecated kwarg 'diffusion_guidance_sale'; "
+                "please rename it to 'diffusion_guidance_scale'."
+            )
+            diffusion_guidance_scale = kwargs.pop("diffusion_guidance_sale")
+
         if attention_mask is None:
             latent_length = src_latents.shape[1]
             attention_mask = torch.ones(src_latents.shape[0], latent_length, device=src_latents.device, dtype=src_latents.dtype)
