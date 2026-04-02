@@ -226,8 +226,11 @@ def estimate_batch_budget(
 
     usable_mb = free_mb * safety_factor
     usable_mb = max(0.0, usable_mb - weight_offset)
-    n_batches = int(usable_mb / per_batch)
-    n_batches = max(min_batches, min(n_batches, max_batches))
+    raw_batches = int(usable_mb / per_batch) if per_batch > 0 else 0
+    # Only apply min_batches floor when there is actual headroom;
+    # if usable VRAM is exhausted, clamp to 1 to avoid OOM.
+    lower_bound = 1 if raw_batches == 0 else min_batches
+    n_batches = max(lower_bound, min(raw_batches, max_batches))
 
     logger.info(
         "[INFO] Estimation budget: %d batches (%.0f MiB free, %.0f MiB usable)",

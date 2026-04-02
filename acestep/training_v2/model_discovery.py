@@ -108,6 +108,8 @@ def detect_base_model(config: Dict, dir_name: str = "") -> str:
 
     Uses ``is_turbo`` flag and directory name heuristics.  Returns one
     of ``"turbo"``, ``"base"``, ``"sft"``, or ``"unknown"``.
+    For XL (4B) models, the base variant is the same as the 2B
+    counterpart (e.g., xl-turbo → turbo, xl-base → base).
     """
     # Explicit is_turbo flag
     if config.get("is_turbo", False):
