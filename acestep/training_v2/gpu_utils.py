@@ -155,9 +155,10 @@ def get_available_vram_mb(device: str = "auto") -> Optional[float]:
 # ---------------------------------------------------------------------------
 
 # Rough per-batch memory estimate for a single forward+backward pass through
-# the full DiT decoder (24 layers, hidden_size=2048) with all parameters
-# requiring gradients.  This is a *very* conservative upper bound.
-_BYTES_PER_BATCH_ESTIMATE_BF16: float = 1200.0  # ~1.2 GiB per sample
+# the DiT decoder with all parameters requiring gradients.
+# Conservative upper bound covering both 2B (24 layers, hidden_size=2048)
+# and XL/4B (32 layers, hidden_size=2560) models.
+_BYTES_PER_BATCH_ESTIMATE_BF16: float = 2000.0  # ~2.0 GiB per sample
 
 
 def get_gpu_info(device: str = "auto") -> dict:
@@ -213,8 +214,9 @@ def estimate_batch_budget(
         return min_batches
 
     usable_mb = free_mb * safety_factor
-    # Subtract ~4 GiB for the model weights themselves
-    usable_mb = max(0.0, usable_mb - 4096.0)
+    # Subtract ~6 GiB for the model weights themselves
+    # (conservative: covers both 2B ~4.7GB and XL/4B ~9GB decoder subsets)
+    usable_mb = max(0.0, usable_mb - 6000.0)
     n_batches = int(usable_mb / _BYTES_PER_BATCH_ESTIMATE_BF16)
     n_batches = max(min_batches, min(n_batches, max_batches))
 
