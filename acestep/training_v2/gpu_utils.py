@@ -154,11 +154,15 @@ def get_available_vram_mb(device: str = "auto") -> Optional[float]:
 # Estimation batch budget
 # ---------------------------------------------------------------------------
 
-# Rough per-batch memory estimate for a single forward+backward pass through
+# Rough per-batch memory estimates for a single forward+backward pass through
 # the DiT decoder with all parameters requiring gradients.
-# Conservative upper bound covering both 2B (24 layers, hidden_size=2048)
-# and XL/4B (32 layers, hidden_size=2560) models.
-_BYTES_PER_BATCH_ESTIMATE_BF16: float = 2000.0  # ~2.0 GiB per sample
+# These are *very* conservative upper bounds.
+_BYTES_PER_BATCH_2B_BF16: float = 1200.0  # ~1.2 GiB per sample (24 layers, hidden_size=2048)
+_BYTES_PER_BATCH_XL_BF16: float = 2000.0  # ~2.0 GiB per sample (32 layers, hidden_size=2560)
+
+# Model weight VRAM offsets (MiB) subtracted before estimating batch budget.
+_WEIGHT_OFFSET_2B: float = 4096.0   # ~4 GiB for 2B decoder weights
+_WEIGHT_OFFSET_XL: float = 6000.0   # ~6 GiB for XL (4B) decoder weights
 
 
 def get_gpu_info(device: str = "auto") -> dict:
@@ -196,6 +200,7 @@ def estimate_batch_budget(
     safety_factor: float = 0.8,
     min_batches: int = 4,
     max_batches: int = 64,
+    variant: str = "",
 ) -> int:
     """Estimate how many estimation batches fit in available VRAM.
 
@@ -204,6 +209,8 @@ def estimate_batch_budget(
         safety_factor: Fraction of free VRAM to use (0-1).
         min_batches: Floor value.
         max_batches: Ceiling value.
+        variant: Model variant (e.g. "turbo", "xl_base"). XL variants use
+                 larger weight and per-batch estimates.
 
     Returns:
         Number of estimation batches (clamped to [min_batches, max_batches]).
@@ -213,11 +220,13 @@ def estimate_batch_budget(
         logger.info("[INFO] VRAM unknown -- using minimum batch budget of %d", min_batches)
         return min_batches
 
+    is_xl = variant.startswith("xl") if variant else False
+    weight_offset = _WEIGHT_OFFSET_XL if is_xl else _WEIGHT_OFFSET_2B
+    per_batch = _BYTES_PER_BATCH_XL_BF16 if is_xl else _BYTES_PER_BATCH_2B_BF16
+
     usable_mb = free_mb * safety_factor
-    # Subtract ~6 GiB for the model weights themselves
-    # (conservative: covers both 2B ~4.7GB and XL/4B ~9GB decoder subsets)
-    usable_mb = max(0.0, usable_mb - 6000.0)
-    n_batches = int(usable_mb / _BYTES_PER_BATCH_ESTIMATE_BF16)
+    usable_mb = max(0.0, usable_mb - weight_offset)
+    n_batches = int(usable_mb / per_batch)
     n_batches = max(min_batches, min(n_batches, max_batches))
 
     logger.info(
