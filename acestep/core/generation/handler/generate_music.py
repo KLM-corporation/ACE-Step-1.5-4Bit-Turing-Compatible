@@ -18,6 +18,7 @@ from acestep.core.generation.handler.repaint_waveform_splice import (
 from acestep.gpu_config import (
     DIT_INFERENCE_VRAM_PER_BATCH,
     VRAM_SAFETY_MARGIN_GB,
+    get_dit_type_from_path,
     get_effective_free_vram_gb,
 )
 
@@ -135,8 +136,14 @@ class GenerateMusicMixin:
             return None
 
         duration_s = audio_duration or 60.0
+        # Determine actual model size (XL vs standard) and CFG mode.
+        dit_type = get_dit_type_from_path(getattr(self, "config_path", ""))
+        is_xl = dit_type.startswith("xl_")
         # CFG doubles forward-pass memory: two DiT evaluations per step.
-        dit_key = "base" if guidance_scale > 1.0 else "turbo"
+        if guidance_scale > 1.0:
+            dit_key = "xl_base" if is_xl else "base"
+        else:
+            dit_key = "xl_turbo" if is_xl else "turbo"
         per_batch_gb = DIT_INFERENCE_VRAM_PER_BATCH.get(dit_key, 0.6)
         # Longer audio = more latent frames (5 Hz rate) = more memory.
         duration_factor = max(1.0, duration_s / 60.0)

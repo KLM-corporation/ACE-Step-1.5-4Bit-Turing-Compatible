@@ -6,6 +6,9 @@ import torch
 from loguru import logger
 
 # Default lyric alignment attention layers config for the 2B DiT model.
+# XL (4B) models MUST provide ``lyric_alignment_layers_config`` in their
+# config.json — this default will produce incorrect alignment for XL
+# because XL has 32 layers / 32 heads vs 24 layers / 16 heads in 2B.
 _DEFAULT_LAYERS_CONFIG: Dict[int, List[int]] = {2: [6], 3: [10, 11], 4: [3], 5: [8, 9], 6: [8]}
 
 
