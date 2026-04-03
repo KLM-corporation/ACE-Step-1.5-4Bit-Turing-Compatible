@@ -112,6 +112,46 @@ class GenerateMusicRequestMixinTests(unittest.TestCase):
         self.assertEqual(error["error"], "Invalid source audio")
 
 
+    def test_cover_no_src_audio_with_codes_succeeds(self):
+        """Cover task should succeed without src_audio when audio codes are provided."""
+        host = _Host()
+        _, processed_src_audio, error = host._prepare_reference_and_source_audio(
+            reference_audio=None,
+            src_audio=None,
+            audio_code_string="<|audio_code_42|>",
+            actual_batch_size=1,
+            task_type="cover",
+        )
+        self.assertIsNone(error)
+        self.assertIsNone(processed_src_audio)
+
+    def test_cover_no_src_audio_no_codes_errors(self):
+        """Cover task without src_audio and without audio codes should error."""
+        host = _Host()
+        _, _, error = host._prepare_reference_and_source_audio(
+            reference_audio=None,
+            src_audio=None,
+            audio_code_string="",
+            actual_batch_size=1,
+            task_type="cover",
+        )
+        self.assertIsNotNone(error)
+        self.assertFalse(error["success"])
+        self.assertIn("requires source audio", error["error"])
+
+    def test_repaint_no_src_audio_with_codes_succeeds(self):
+        """Repaint task should succeed without src_audio when audio codes are provided."""
+        host = _Host()
+        _, processed_src_audio, error = host._prepare_reference_and_source_audio(
+            reference_audio=None,
+            src_audio=None,
+            audio_code_string="<|audio_code_99|>",
+            actual_batch_size=1,
+            task_type="repaint",
+        )
+        self.assertIsNone(error)
+        self.assertIsNone(processed_src_audio)
+
     def test_should_return_intermediate_always_true(self):
         """Intermediate tensors must always be returned for LRC generation support."""
         host = _Host()

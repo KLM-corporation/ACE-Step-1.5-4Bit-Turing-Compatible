@@ -134,16 +134,22 @@ class GenerateMusicRequestMixin:
                         "error": "Invalid source audio",
                     }
         elif task_type in _src_audio_required_tasks:
-            return None, None, {
-                "audios": [],
-                "status_message": (
-                    f"Task '{task_type}' requires source audio, but none was provided. "
-                    f"Please upload a source audio file."
-                ),
-                "extra_outputs": {},
-                "success": False,
-                "error": f"Task '{task_type}' requires source audio",
-            }
+            if self._has_non_empty_audio_codes(audio_code_string):
+                logger.info(
+                    "[generate_music] %s task: no src_audio but audio codes provided, proceeding with codes",
+                    task_type,
+                )
+            else:
+                return None, None, {
+                    "audios": [],
+                    "status_message": (
+                        f"Task '{task_type}' requires source audio, but none was provided. "
+                        f"Please upload a source audio file."
+                    ),
+                    "extra_outputs": {},
+                    "success": False,
+                    "error": f"Task '{task_type}' requires source audio",
+                }
 
         return refer_audios, processed_src_audio, None
 
