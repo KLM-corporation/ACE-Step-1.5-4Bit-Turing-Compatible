@@ -80,8 +80,8 @@ class PaddingMixin:
                         # passed without LM auto-detection (see issue #929).
                         fallback_duration = 120.0
                         logger.warning(
-                            "[padding] No valid audio_duration provided (got %s); "
-                            "using fallback duration %.0fs.",
+                            "[padding] No valid audio_duration provided (got {}); "
+                            "using fallback duration {:.0f}s.",
                             audio_duration,
                             fallback_duration,
                         )

@@ -111,6 +111,7 @@ class GenerateMusicRequestMixin:
             refer_audios = [[torch.zeros(2, 30 * self.sample_rate)] for _ in range(actual_batch_size)]
 
         processed_src_audio = None
+        _src_audio_required_tasks = {"cover", "repaint", "lego", "extract"}
         if task_type == "text2music":
             if src_audio is not None:
                 logger.info("[generate_music] text2music task does not use src_audio, ignoring")
@@ -132,6 +133,17 @@ class GenerateMusicRequestMixin:
                         "success": False,
                         "error": "Invalid source audio",
                     }
+        elif task_type in _src_audio_required_tasks:
+            return None, None, {
+                "audios": [],
+                "status_message": (
+                    f"Task '{task_type}' requires source audio, but none was provided. "
+                    f"Please upload a source audio file."
+                ),
+                "extra_outputs": {},
+                "success": False,
+                "error": f"Task '{task_type}' requires source audio",
+            }
 
         return refer_audios, processed_src_audio, None
 
