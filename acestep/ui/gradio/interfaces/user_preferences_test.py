@@ -157,8 +157,9 @@ class RestoreTests(unittest.TestCase):
         """Restore JS should compute mp3_controls_row visibility from
         the restored audio_format and append it."""
         js = _build_restore_js(_NUM_OUTPUTS)
-        self.assertIn("mp3Visible", js)
-        self.assertIn('result.push(mp3Visible)', js)
+        self.assertIn("audioFormat", js)
+        self.assertIn('result.push(', js)
+        self.assertIn('"mp3"', js)
 
     def test_restore_preferences_passes_through_values(self):
         """Non-None values are passed through unchanged."""

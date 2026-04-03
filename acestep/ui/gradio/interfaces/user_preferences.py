@@ -149,9 +149,10 @@ def _build_restore_js(num_outputs: int) -> str:
             // If none of the keys had stored values, skip entirely.
             if (result.every(v => v === null)) return SKIP;
             // Compute mp3_controls_row visibility from audio_format (index 0).
+            // When audioFormat is null (no stored value), push null so Python
+            // emits gr.update() and preserves whatever init_params set.
             const audioFormat = result[0];
-            const mp3Visible = audioFormat === "mp3" || audioFormat === null;
-            result.push(mp3Visible);
+            result.push(audioFormat === null ? null : audioFormat === "mp3");
             return result;
         }} catch (_e) {{
             return SKIP;
