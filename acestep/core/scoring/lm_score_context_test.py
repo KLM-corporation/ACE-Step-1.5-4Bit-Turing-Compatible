@@ -13,6 +13,7 @@ asserting three invariants that are easy to regress silently:
    PyTorch copy does not remain resident between generations.
 """
 
+import threading
 import unittest
 
 from acestep.core.scoring.lm_score import _load_scoring_model_context
@@ -108,12 +109,14 @@ class LoadScoringModelContextTests(unittest.TestCase):
     def test_mlx_outermost_exit_drops_cached_model(self):
         """On MLX+offload, outer exit must clear ``_hf_model_for_scoring``."""
         handler = _FakeHandler("mlx", offload=True)
-        self.assertIsNotNone(handler._hf_model_for_scoring)
+        # Use ``getattr(..., None)`` so the test is resilient to either
+        # cleanup style: setting the attribute to ``None`` or deleting it.
+        self.assertIsNotNone(getattr(handler, "_hf_model_for_scoring", None))
         with _load_scoring_model_context(handler):
             # Still cached while we're inside the context.
-            self.assertIsNotNone(handler._hf_model_for_scoring)
+            self.assertIsNotNone(getattr(handler, "_hf_model_for_scoring", None))
         # Released after outermost exit so unified memory is returned to OS.
-        self.assertIsNone(handler._hf_model_for_scoring)
+        self.assertIsNone(getattr(handler, "_hf_model_for_scoring", None))
 
     def test_vllm_outermost_exit_keeps_cached_model(self):
         """vllm backend must NOT drop the cached HF model (CUDA is fine)."""
@@ -144,6 +147,43 @@ class LoadScoringModelContextTests(unittest.TestCase):
                     pass
         # Outer entry queries once; nested entries are pure no-ops.
         self.assertEqual(handler.get_calls, 1)
+
+    def test_outermost_detection_is_thread_local(self):
+        """Each thread must track its own outermost-entry depth.
+
+        The reentrancy depth is kept in ``threading.local`` keyed by
+        handler id so that two Autoscore calls on the same handler do
+        not see each other's counter.  This test runs two worker
+        threads that each enter nested contexts on a shared handler; if
+        depth tracking regressed to a process-global counter one thread
+        could mis-identify itself as "nested" and skip the outer model
+        fetch.  Uses ``offload=False`` so the MLX release path does not
+        drop the cached model between threads and confuse the count.
+        """
+        handler = _FakeHandler("mlx", offload=False)
+        start = threading.Barrier(2)
+
+        def worker():
+            # Synchronise thread start so both worker threads race into
+            # the handler-level lock simultaneously.
+            start.wait()
+            with _load_scoring_model_context(handler):
+                with _load_scoring_model_context(handler):
+                    pass
+
+        t1 = threading.Thread(target=worker)
+        t2 = threading.Thread(target=worker)
+        t1.start()
+        t2.start()
+        t1.join()
+        t2.join()
+
+        # Both threads must have counted as outermost, so
+        # ``get_hf_model_for_scoring`` must have fired twice.  If depth
+        # tracking leaked across threads, the second thread would see
+        # ``depth > 0`` at outer entry, fall into the nested no-op
+        # branch, and never call ``get_hf_model_for_scoring``.
+        self.assertEqual(handler.get_calls, 2)
 
 
 if __name__ == "__main__":
