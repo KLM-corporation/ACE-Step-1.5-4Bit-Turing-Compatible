@@ -185,6 +185,34 @@ class LoadScoringModelContextTests(unittest.TestCase):
         # branch, and never call ``get_hf_model_for_scoring``.
         self.assertEqual(handler.get_calls, 2)
 
+    def test_mlx_cleanup_runs_when_offload_raises(self):
+        """MLX cached-model release must run even if model.to("cpu") fails.
+
+        If ``model.to("cpu")`` raises inside the outermost exit, the
+        ``_hf_model_for_scoring = None`` cleanup must still execute so that
+        the ~8 GB HF scoring model is not leaked on the exception path.
+        """
+
+        class _FailingOffloadModel(_FakeModel):
+            def to(self, device):
+                super().to(device)
+                if device == "cpu":
+                    raise RuntimeError("simulated offload failure")
+                return self
+
+        handler = _FakeHandler("mlx", offload=True)
+        handler._hf_model_for_scoring = _FailingOffloadModel()
+
+        with self.assertRaises(RuntimeError):
+            with _load_scoring_model_context(handler):
+                pass
+
+        self.assertIsNone(
+            getattr(handler, "_hf_model_for_scoring", None),
+            "MLX cleanup must still release the cached model after a "
+            "failed .to('cpu') call so unified memory is returned to the OS",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

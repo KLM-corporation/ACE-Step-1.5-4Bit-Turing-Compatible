@@ -217,29 +217,35 @@ def _load_scoring_model_context(llm_handler):
             yield
         finally:
             depths.pop(key, None)
-            if offload and hasattr(model, "to"):
-                logger.info("[scoring] Offloading HF scoring model to CPU")
-                model.to("cpu")
-                _empty_accelerator_cache(backend)
-
-            # On MLX with offload enabled, the HF scoring model is a
-            # *separate* ~8 GB PyTorch copy of the LM (the MLX model itself
-            # cannot be used for torch teacher-forcing scoring).  Keeping
-            # it resident on CPU between scoring passes doubles the LM
-            # footprint in unified memory and -- combined with repeated
-            # .to("mps") / .to("cpu") migrations -- pushes 32 GB Macs past
-            # their limit (issue #1081).  Drop the cached copy so unified
-            # memory is returned to the OS; it will be re-loaded from the
-            # HF cache on the next scoring call.
-            if backend == "mlx" and offload:
-                llm_handler._hf_model_for_scoring = None
-                del model
-                gc.collect()
-                _empty_accelerator_cache("mlx")
-                logger.info(
-                    "[scoring] Released cached HF scoring model on MLX "
-                    "backend (will be reloaded on next Autoscore call)"
-                )
+            # Nested try/finally so that a failing ``model.to("cpu")`` does
+            # not skip the MLX cached-model release below.  If the offload
+            # raises and we leave ``_hf_model_for_scoring`` cached, the
+            # unified-memory leak this PR is meant to fix simply moves from
+            # the happy path to the failure path.
+            try:
+                if offload and hasattr(model, "to"):
+                    logger.info("[scoring] Offloading HF scoring model to CPU")
+                    model.to("cpu")
+                    _empty_accelerator_cache(backend)
+            finally:
+                # On MLX with offload enabled, the HF scoring model is a
+                # *separate* ~8 GB PyTorch copy of the LM (the MLX model itself
+                # cannot be used for torch teacher-forcing scoring).  Keeping
+                # it resident on CPU between scoring passes doubles the LM
+                # footprint in unified memory and -- combined with repeated
+                # .to("mps") / .to("cpu") migrations -- pushes 32 GB Macs past
+                # their limit (issue #1081).  Drop the cached copy so unified
+                # memory is returned to the OS; it will be re-loaded from the
+                # HF cache on the next scoring call.
+                if backend == "mlx" and offload:
+                    llm_handler._hf_model_for_scoring = None
+                    del model
+                    gc.collect()
+                    _empty_accelerator_cache("mlx")
+                    logger.info(
+                        "[scoring] Released cached HF scoring model on MLX "
+                        "backend (will be reloaded on next Autoscore call)"
+                    )
 
 
 def _get_logits_and_target_for_scoring(llm_handler, formatted_prompt: str,
