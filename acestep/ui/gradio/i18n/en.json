@@ -208,7 +208,7 @@
     "constrained_debug_label": "Constrained Decoding Debug",
     "constrained_debug_info": "Shows detailed logs of how the LM's output tokens are being filtered/constrained. Only useful for developers debugging token generation issues. Leave off for normal use.",
     "lm_use_legacy_cfg_prompt_label": "LM CFG: Legacy Uncond Prompt",
-    "lm_use_legacy_cfg_prompt_info": "Debug A/B toggle. OFF (default): CFG uncond uses the training-aligned format (user='NO USER INPUT', open assistant turn). ON: uses the pre-fix format (keeps caption+lyrics in uncond, closes assistant turn). Only affects codes-phase CFG. Leave OFF for production.",
+    "lm_use_legacy_cfg_prompt_info": "Debug A/B toggle. OFF (default): CFG uncond user is bare 'NO USER INPUT' (training-aligned, truly unconditional). ON: uncond keeps caption+lyrics (pre-fix design — uncond still carries conditioning, so CFG mostly amplifies the CoT-metadata direction). Byte-level structure (open assistant turn, separator newlines, empty-reasoning rendering) is identical in both states, so the toggle isolates just this one design variable. Only affects codes-phase CFG. Leave OFF for production.",
     "auto_score_label": "Auto Score",
     "auto_score_info": "Automatically calculates a quality score (0–1) for each generated audio using perplexity. Higher = better. Useful for comparing results in a batch to find the best one. Adds a few seconds per sample.",
     "auto_lrc_label": "Auto LRC",

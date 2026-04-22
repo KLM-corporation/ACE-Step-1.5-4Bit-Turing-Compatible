@@ -205,7 +205,7 @@
     "constrained_debug_label": "约束解码调试",
     "constrained_debug_info": "启用约束解码的调试日志(勾选以查看详细日志)。",
     "lm_use_legacy_cfg_prompt_label": "LM CFG: 使用旧版无条件 Prompt",
-    "lm_use_legacy_cfg_prompt_info": "调试用 A/B 开关。关闭(默认): CFG 无条件分支使用与训练对齐的格式(user='NO USER INPUT'，assistant turn 保持开放)。开启: 使用修复前的旧逻辑(无条件分支保留 caption+lyrics，assistant turn 被关闭)。仅影响 codes 阶段 CFG。",
+    "lm_use_legacy_cfg_prompt_info": "调试用 A/B 开关。关闭(默认): CFG 无条件分支 user 为裸 'NO USER INPUT'(训练对齐，真正的无条件)。开启: 无条件分支保留 caption+lyrics(修复前的设计——无条件仍带着条件，CFG 只能放大 CoT 元数据方向)。两种状态下字节级结构(assistant turn 开放、分隔换行、空 reasoning 渲染)完全一致，开关只隔离这一个设计变量。仅影响 codes 阶段 CFG。",
     "auto_score_label": "自动评分",
     "auto_score_info": "自动计算所有生成音频的质量分数。",
     "auto_lrc_label": "自动 LRC",
