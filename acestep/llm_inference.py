@@ -1752,8 +1752,14 @@ class LLMHandler:
             # Match training CFG-dropout format: user message is the raw negative prompt
             # (the literal "NO USER INPUT" when no override), NOT wrapped in
             # "# Caption\n...\n\n# Lyric\n...\n".
+            #
+            # Empty reasoning is "<think>\n\n</think>" (not "<think>\n</think>"),
+            # because Qwen's chat template renders assistant messages containing a
+            # </think> tag through the pattern `<think>\n{reasoning.strip('\n')}\n
+            # </think>`, so empty reasoning produces the extra inner newline that the
+            # model actually saw during training.
             has_negative_prompt = self._has_meaningful_negative_prompt(negative_prompt)
-            cot_for_prompt = "<think>\n</think>"
+            cot_for_prompt = "<think>\n\n</think>"
             user_prompt = negative_prompt if has_negative_prompt else "NO USER INPUT"
         else:
             cot_for_prompt = cot_text
