@@ -69,6 +69,22 @@ class _LazyWavelet:
         dwt = DWT1DForward(J=1, mode="zero", wave=wavelet).to(device=device, dtype=torch.float32)
         iwt = DWT1DInverse(mode="zero", wave=wavelet).to(device=device, dtype=torch.float32)
         self._cache[key] = (dwt, iwt)
+        # One-shot confirmation that the requested basis actually got built.
+        # Log filter length too so users can see haar(2-tap) vs db4(8-tap)
+        # vs sym8(16-tap) — this is where the "different wavelets, same
+        # output?" claim gets falsified.
+        try:
+            # pytorch_wavelets stores the low-pass analysis filter as `h0`
+            # with shape [1, 1, N]; its length `N` is what differs between
+            # haar (2), db4 (8), sym8 (16) etc.
+            h0 = getattr(dwt, "h0", None)
+            ntap = int(h0.shape[-1]) if h0 is not None else -1
+        except Exception:
+            ntap = -1
+        logger.info(
+            "[DCW] Built DWT1D for wavelet={!r} (low-pass filter taps={}, device={}, dtype={}).",
+            wavelet, ntap, str(device), str(dtype),
+        )
         return dwt, iwt
 
 
