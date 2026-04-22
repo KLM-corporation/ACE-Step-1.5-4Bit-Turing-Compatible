@@ -1724,12 +1724,18 @@ class LLMHandler:
             raise ValueError("LLM tokenizer is not initialized. Call initialize() first.")
 
         if self.use_legacy_cfg_prompt:
-            # Legacy (pre-fix) path kept for manual A/B comparison. Uncond keeps
-            # the caption+lyrics wrapper and the assistant turn is closed with
-            # <|im_end|> before codes are generated.
+            # Isolated-variable A/B path: uncond keeps the `# Caption\n...\n\n#
+            # Lyric\n...\n` wrapper (the pre-fix design choice, where CFG only
+            # amplifies the CoT-metadata direction because caption/lyrics are
+            # identical on both sides). Structural details (open assistant turn,
+            # `<think>\n\n</think>` for empty reasoning, `\n\n` separator before
+            # the first code) match the training-aligned path below so the only
+            # thing that differs between toggle states is the uncond user
+            # content — enabling a clean manual comparison of that single design
+            # decision.
             if is_negative_prompt:
                 has_negative_prompt = self._has_meaningful_negative_prompt(negative_prompt)
-                cot_for_prompt = "<think>\n</think>"
+                cot_for_prompt = "<think>\n\n</think>"
                 caption_for_prompt = negative_prompt if has_negative_prompt else caption
             else:
                 cot_for_prompt = cot_text
@@ -1739,13 +1745,11 @@ class LLMHandler:
                 [
                     {"role": "system", "content": f"# Instruction\n{DEFAULT_LM_INSTRUCTION}\n\n"},
                     {"role": "user", "content": user_prompt},
-                    {"role": "assistant", "content": cot_for_prompt},
                 ],
                 tokenize=False,
-                add_generation_prompt=False,
+                add_generation_prompt=True,
             )
-            if not formatted.endswith('\n'):
-                formatted += '\n'
+            formatted += cot_for_prompt + "\n\n"
             return formatted
 
         if is_negative_prompt:
