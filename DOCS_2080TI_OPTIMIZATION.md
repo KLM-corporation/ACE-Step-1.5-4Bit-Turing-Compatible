@@ -84,4 +84,19 @@ L'objectif est de prouver qu'il n'est pas nécessaire de posséder une H100 ou u
 *Note : Le code contient des hacks spécifiques à Windows et à l'architecture Turing qui ne sont pas forcément élégants, mais qui "font le job".*
 
 ---
+
+## 7. Maintenance et Mises à jour
+
+L'utilisation du script de mise à jour standard (`check_update.bat`) est **totalement sûre** sur ce fork :
+
+- **Suivi du Fork** : Le script est configuré pour récupérer les mises à jour sur `origin` (votre fork GitHub). Il ne tentera pas de restaurer le code original de ACE-Step.
+- **Préservation des Patchs** : Vos modifications de configuration et les patchs d'architecture Turing sont inclus dans le cycle de vie du dépôt.
+- **Sécurité** : En cas de modification locale conflictuelle, le script crée automatiquement un dossier de sauvegarde (`.update_backup_...`) avant toute opération.
+
+Pour mettre à jour votre installation avec les derniers correctifs de ce fork, lancez simplement :
+```bash
+check_update.bat
+```
+
+---
 *Documentation rédigée pour le Fork ACE-Step 1.5 XL Optimization.*
