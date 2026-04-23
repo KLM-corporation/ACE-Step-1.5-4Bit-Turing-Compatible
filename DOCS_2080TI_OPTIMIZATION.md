@@ -2,7 +2,7 @@
 
 Ce document détaille les modifications techniques apportées à ce fork pour permettre l'exécution du modèle **ACE-Step 1.5 XL (4B parameters)** sur une configuration matérielle grand public : **NVIDIA RTX 2080 Ti (11Go VRAM)** et **32Go de RAM** sous Windows.
 
-Bien que le code puisse paraître "brouillon" par endroits, ces ajustements sont le résultat d'une recherche de stabilité numérique et d'optimisation de la mémoire vidéo (VRAM) pour l'architecture **Turing**.
+Bien que le code soit de **basse qualité** ("brouillon") car réalisé en moins de **3 heures**, ces ajustements permettent de transformer un échec critique (**OOM**) en un succès fonctionnel : environ **5m30** pour générer une musique sur le modèle XL SFT (Batch Size 1).
 
 ---
 
@@ -69,11 +69,11 @@ ACESTEP_GENERATION_TIMEOUT=36000
 
 *Configuration : RTX 2080 Ti 11GB, Windows 11, ACE-Step 1.5 XL Turbo.*
 
-| Mode | Usage VRAM (Peak) | Temps / Étape | Qualité Audio |
+| Mode | Usage VRAM (Peak) | Temps / Étape | Statut XL SFT (BS1) |
 | :--- | :--- | :--- | :--- |
-| **Standard (BF16)** | > 12 GB (OOM) | N/A | N/A |
-| **INT8 (Quantized)** | ~8.5 GB | ~30s | Excellente |
-| **INT4 (ACE-Step Fork)** | **~6.8 GB** | **~31s** | **Très Bonne** |
+| **Standard (BF16)** | > 12 GB | N/A | **Échec (OOM)** |
+| **INT8 (Standard)** | ~8.5 GB | ~30s | Stable |
+| **INT4 (Ce Fork)** | **~6.8 GB** | **~31s** | **Succès (~5m30 total)** |
 
 ---
 

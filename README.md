@@ -20,8 +20,9 @@
 </p>
 
 > [!IMPORTANT]
-> **🚀 Fork Optimization** : Ce fork est optimisé pour faire tourner **ACE-Step 1.5 XL (4B)** sur du matériel grand public (ex: **RTX 2080 Ti 11GB**). 
-> Consultez notre **[Guide d'Optimisation Technique](./DOCS_2080TI_OPTIMIZATION.md)** pour les détails sur la quantification INT4 custom et la stabilité numérique.
+> **🚀 Fork Optimization (Speedrun 3h)** : Ce fork a été réalisé en moins de 3 heures dans un mode "brouillon" assumé. Malgré un code de qualité discutable, il permet de faire tourner le modèle **ACE-Step 1.5 XL SFT** en Batch Size 1 sur une **RTX 2080 Ti 11GB**, là où le modèle original provoquait un **OOM** (Out of Memory) immédiat. 
+> **Performance** : Comptez environ **5m30** pour une génération complète.
+> Consultez notre **[Guide d'Optimisation Technique](./DOCS_2080TI_OPTIMIZATION.md)** pour les détails.
 
 
 ## 📰 News
