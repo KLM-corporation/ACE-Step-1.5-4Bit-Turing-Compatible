@@ -143,3 +143,92 @@ def test_corrector_pix_mode_ignores_wavelet_dep():
     out = corrector.apply(x, y, t_curr=1.0)
     expected = x + 0.3 * (x - y)
     assert torch.allclose(out, expected, atol=1e-6)
+
+
+def test_corrector_pix_uses_raw_scaler_no_t_decay():
+    # pix matches the reference FLUX scheduler: the scaler is applied raw,
+    # without any t modulation, so an A/B against the reference baseline is
+    # well-defined at any timestep.
+    corrector = dcw_correction.DCWCorrector(
+        enabled=True, mode="pix", scaler=0.3, wavelet="haar"
+    )
+    x = _latent()
+    y = _latent(seed=1)
+    out_half = corrector.apply(x, y, t_curr=0.5)
+    out_zero = corrector.apply(x, y, t_curr=0.0)
+    expected = x + 0.3 * (x - y)
+    assert torch.allclose(out_half, expected, atol=1e-6)
+    assert torch.allclose(out_zero, expected, atol=1e-6)
+
+
+@pytest.mark.skipif(not HAS_PW, reason="pytorch_wavelets not installed")
+def test_corrector_high_mode_is_identity_at_t_one():
+    # Paper Eq. 21: high-band correction uses the *complementary* schedule
+    # `(1 - t) * scaler`, so at t=1 (highest noise, earliest step) the
+    # correction must vanish — it only kicks in as the network starts
+    # painting high-frequency detail near t→0.
+    corrector = dcw_correction.DCWCorrector(
+        enabled=True, mode="high", scaler=0.5, wavelet="haar"
+    )
+    x = _latent()
+    y = _latent(seed=1)
+    out = corrector.apply(x, y, t_curr=1.0)
+    assert torch.allclose(out, x, atol=1e-5)
+
+
+@pytest.mark.skipif(not HAS_PW, reason="pytorch_wavelets not installed")
+def test_corrector_high_mode_max_at_t_zero():
+    # Complement of the test above: at t=0 the high-band correction reaches
+    # its full `scaler` strength and should equal a raw `dcw_high` call.
+    corrector = dcw_correction.DCWCorrector(
+        enabled=True, mode="high", scaler=0.5, wavelet="haar"
+    )
+    x = _latent()
+    y = _latent(seed=1)
+    out = corrector.apply(x, y, t_curr=0.0)
+    expected = dcw_correction.dcw_high(x, y, scaler=0.5, wavelet="haar")
+    assert torch.allclose(out, expected, atol=1e-5)
+
+
+@pytest.mark.skipif(not HAS_PW, reason="pytorch_wavelets not installed")
+def test_corrector_double_mode_complementary_schedule():
+    # double mode runs the two bands on opposite schedules:
+    #   low_s  = t * scaler
+    #   high_s = (1 - t) * high_scaler
+    # At t=0.5 with scaler=0.4, high_scaler=0.6 that's low_s=0.2, high_s=0.3.
+    corrector = dcw_correction.DCWCorrector(
+        enabled=True, mode="double", scaler=0.4, high_scaler=0.6, wavelet="haar"
+    )
+    x = _latent()
+    y = _latent(seed=1)
+    out = corrector.apply(x, y, t_curr=0.5)
+    expected = dcw_correction.dcw_double(
+        x, y, low_scaler=0.2, high_scaler=0.3, wavelet="haar"
+    )
+    assert torch.allclose(out, expected, atol=1e-5)
+
+
+@pytest.mark.skipif(not HAS_PW, reason="pytorch_wavelets not installed")
+def test_corrector_double_mode_low_only_at_t_one():
+    # At t=1 only the low band gets corrected (high coefficient is zero).
+    corrector = dcw_correction.DCWCorrector(
+        enabled=True, mode="double", scaler=0.4, high_scaler=0.6, wavelet="haar"
+    )
+    x = _latent()
+    y = _latent(seed=1)
+    out = corrector.apply(x, y, t_curr=1.0)
+    expected = dcw_correction.dcw_low(x, y, scaler=0.4, wavelet="haar")
+    assert torch.allclose(out, expected, atol=1e-5)
+
+
+@pytest.mark.skipif(not HAS_PW, reason="pytorch_wavelets not installed")
+def test_corrector_double_mode_high_only_at_t_zero():
+    # At t=0 only the high band gets corrected (low coefficient is zero).
+    corrector = dcw_correction.DCWCorrector(
+        enabled=True, mode="double", scaler=0.4, high_scaler=0.6, wavelet="haar"
+    )
+    x = _latent()
+    y = _latent(seed=1)
+    out = corrector.apply(x, y, t_curr=0.0)
+    expected = dcw_correction.dcw_high(x, y, scaler=0.6, wavelet="haar")
+    assert torch.allclose(out, expected, atol=1e-5)

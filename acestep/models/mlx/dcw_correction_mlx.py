@@ -160,17 +160,38 @@ def apply_mlx_dcw(
     if not enabled:
         return x_next
 
-    s = float(t_curr) * float(scaler)
-    hs = float(t_curr) * float(high_scaler)
-
-    if mode == "double":
-        if s == 0.0 and hs == 0.0:
-            return x_next
-    elif s == 0.0:
-        return x_next
+    # Per-mode schedule — see `DCWCorrector.apply` docstring for the
+    # paper Eq. 20 / 21 justification.  low decays with t, high is the
+    # complementary schedule (weak at high noise, strong near t→0),
+    # pix uses the raw scaler (matches FLUX reference).
+    t = float(t_curr)
+    raw_low = float(scaler)
+    raw_high = float(high_scaler)
+    low_s = t * raw_low
+    high_s = (1.0 - t) * raw_low
+    double_high_s = (1.0 - t) * raw_high
 
     if mode == "pix":
-        return x_next + s * (x_next - denoised)
+        if raw_low == 0.0:
+            return x_next
+        return x_next + raw_low * (x_next - denoised)
+
+    if mode == "low":
+        s_active = low_s
+    elif mode == "high":
+        s_active = high_s
+    elif mode == "double":
+        if low_s == 0.0 and double_high_s == 0.0:
+            return x_next
+        s_active = None  # handled below
+    else:
+        raise ValueError(
+            f"Invalid dcw_mode='{mode}' on MLX path. "
+            "Expected one of 'low', 'high', 'double', 'pix'."
+        )
+
+    if mode != "double" and s_active == 0.0:
+        return x_next
 
     if wavelet == "haar":
         T_out = x_next.shape[1]
@@ -178,21 +199,21 @@ def apply_mlx_dcw(
         yL, yH = _haar_dwt_1d(denoised)
 
         if mode == "low":
-            xL = xL + s * (xL - yL)
+            xL = xL + low_s * (xL - yL)
         elif mode == "high":
-            xH = xH + s * (xH - yH)
-        elif mode == "double":
-            if s != 0.0:
-                xL = xL + s * (xL - yL)
-            if hs != 0.0:
-                xH = xH + hs * (xH - yH)
-        else:
-            raise ValueError(
-                f"Invalid dcw_mode='{mode}' on MLX path. "
-                "Expected one of 'low', 'high', 'double', 'pix'."
-            )
+            xH = xH + high_s * (xH - yH)
+        else:  # double
+            if low_s != 0.0:
+                xL = xL + low_s * (xL - yL)
+            if double_high_s != 0.0:
+                xH = xH + double_high_s * (xH - yH)
         return _haar_idwt_1d(xL, xH, T_out)
 
     # Non-Haar wavelets go through the torch bridge so MLX users get the
-    # same set of choices (db4, sym8, coif2, …) as PyTorch users.
-    return _torch_bridge_dcw(x_next, denoised, mode, s, hs, wavelet)
+    # same set of choices (db4, sym8, coif2, …) as PyTorch users.  Pass
+    # the already-scheduled coefficients — the bridge just applies them.
+    if mode == "low":
+        return _torch_bridge_dcw(x_next, denoised, mode, low_s, 0.0, wavelet)
+    if mode == "high":
+        return _torch_bridge_dcw(x_next, denoised, mode, high_s, 0.0, wavelet)
+    return _torch_bridge_dcw(x_next, denoised, mode, low_s, double_high_s, wavelet)

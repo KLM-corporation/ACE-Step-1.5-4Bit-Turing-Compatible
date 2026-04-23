@@ -36,14 +36,24 @@ denoised = x - v * t_curr                  # predicted clean sample x_0
 xL, xH   = DWT(x_next)
 yL, yH   = DWT(denoised)
 
-xL       = xL + s * (xL - yL)              # "low" mode   (Eq. 18 / 20)
-xH[j]    = xH[j] + s * (xH[j] - yH[j])     # "high" mode
+xL       = xL + λ_low  * (xL - yL)         # "low" mode   (Eq. 18 / 20)
+xH[j]    = xH[j] + λ_high * (xH[j] - yH[j])  # "high" mode (Eq. 18 / 21)
 x_next   = IDWT(xL, xH)
 ```
 
-For flow-matching ACE-Step, the scaler is modulated by the current noise
-level: `s = t_curr * dcw_scaler`. So a constant user-facing `dcw_scaler`
-starts at its nominal value near `t=1` and decays to zero as `t → 0`.
+**Per-band schedule** (matches the paper's Eq. 20 / 21, following the
+EDM reference in `AMAP-ML/DCW/generate.py`):
+
+- `λ_low  = t_curr * dcw_scaler` — strongest at high noise / early
+  steps, decays to 0 as `t → 0`.  Matches the intuition that low-frequency
+  content is painted first in the reverse process.
+- `λ_high = (1 − t_curr) * dcw_scaler` — **complementary** schedule,
+  strongest at low noise / late steps when the network is actually
+  painting high-frequency detail.
+- `double` mode: low band uses `t_curr * dcw_scaler`, high band uses
+  `(1 − t_curr) * dcw_high_scaler` independently.
+- `pix` mode: raw `dcw_scaler` with no `t` modulation, matching the
+  reference FLUX scheduler's pixel-space baseline.
 
 ACE-Step latents are 1-D temporal tensors of shape `[B, T, 64]` at 25 Hz,
 so DCW uses a 1-D DWT along the `T` axis.
@@ -76,21 +86,25 @@ are forwarded through the generation handler chain into the base model's
 
 ### Mode reference
 
-- **`low`** — Push only the low-frequency band away from the denoised
-  estimate. Matches the `dcw_low` code example in the paper's README
-  and is our recommended starting point on ACE-Step. Note that the
-  reference repo does *not* claim a single "best" mode — the FLUX
-  scheduler in AMAP-ML/DCW actually ships with `pix` as the active
-  line and `dcw_low` / `dcw_high` commented out — so treat `low` as a
-  sensible default, not a canonical one.
-- **`high`** — Same but on the high-frequency detail band.
-- **`double`** — Both bands, with independent `dcw_scaler` and
-  `dcw_high_scaler`. ACE-Step extension; the reference implementation
-  does not expose a separate high-band scaler.
+- **`low`** — Correct only the low-frequency band.  Schedule
+  `t_curr * dcw_scaler` — strongest at high noise, decays to 0 near
+  `t=0`.  Matches the paper's `dcw_low` example and is the recommended
+  starting point for ACE-Step.  (Note: the FLUX scheduler in
+  AMAP-ML/DCW ships with `pix` as the *active* line and `dcw_low` /
+  `dcw_high` commented out — so treat `low` as a sensible default, not
+  a canonical one.)
+- **`high`** — Correct only the high-frequency detail band.  Schedule
+  `(1 - t_curr) * dcw_scaler` — **complementary** to `low`: near-zero
+  at high noise, strongest as `t → 0`, because high-frequency content
+  is painted later in the reverse process.
+- **`double`** — Correct both bands, with independent `dcw_scaler`
+  (applied to low with `t` schedule) and `dcw_high_scaler` (applied
+  to high with `(1-t)` schedule).  ACE-Step extension; the reference
+  implementation does not expose a separate high-band scaler.
 - **`pix`** — No wavelet transform; correction is applied directly in
-  latent space. This is the mode the reference FLUX scheduler leaves
-  uncommented, so it is useful both as an ablation and as a
-  "closest-to-reference" baseline.
+  latent space with the **raw** `dcw_scaler` (no `t` modulation),
+  matching the reference FLUX scheduler.  Useful both as an ablation
+  and as a "closest-to-reference" baseline.
 
 ## Usage example (Python API)
 
@@ -146,14 +160,12 @@ with `inference_steps ∈ {16, 32}`:
 
 ## Scope
 
-The initial integration enables DCW on the **base** PyTorch sampler path
-(`acestep/models/base/modeling_acestep_v15_base.py`). The following are
-tracked as follow-up work — see issue #1119:
+DCW is wired into every ACE-Step sampler path:
 
-- Propagate the hook to the **turbo**, **sft**, **xl_base**, **xl_sft**,
-  **xl_turbo** model variants.
-- Port the correction to the **MLX** path for Apple Silicon.
-- Expose the parameters in the Gradio UI.
+- **PyTorch**: `base`, `sft`, `turbo`, `xl_base`, `xl_sft`, `xl_turbo`.
+- **MLX** (Apple Silicon): native Haar plus a `pytorch_wavelets` bridge
+  for non-Haar bases — same `dcw_*` kwargs produce the same output.
+- **Gradio UI**: all four controls live under **Advanced DiT → 🧪 DCW**.
 
 ## Citation
 

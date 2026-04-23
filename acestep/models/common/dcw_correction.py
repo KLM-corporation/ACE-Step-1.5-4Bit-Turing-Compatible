@@ -58,9 +58,20 @@ class DCWCorrector:
 
     Encapsulates the mode / scaler / wavelet choice so the sampler loop
     only needs to call ``corrector.apply(x_next, denoised, t_curr)``.
-    The scaler is modulated by ``t_curr`` to match the FLUX-DCW recipe,
-    so a constant user-facing ``scaler`` decays smoothly to zero as
-    ``t → 0``.
+
+    The per-step coefficient follows the paper's Eq. 20 / 21 (EDM
+    reference in ``AMAP-ML/DCW/generate.py``):
+
+    * ``low``: ``λ = t * scaler`` — strongest at high noise / early steps,
+      decays to 0 as ``t → 0``.  Matches the intuition that low-frequency
+      content is painted first.
+    * ``high``: ``λ = (1 - t) * scaler`` — **complementary** schedule,
+      strongest at low noise / late steps when the network is actually
+      painting high-frequency detail.
+    * ``double``: low band uses ``t * scaler``, high band uses
+      ``(1 - t) * high_scaler`` independently.
+    * ``pix``: raw ``scaler`` (no ``t`` modulation), matching the reference
+      FLUX scheduler's pixel-space baseline.
     """
 
     def __init__(
@@ -107,22 +118,23 @@ class DCWCorrector:
             x_next: Latent produced by the sampler step, shape ``[B, T, C]``.
             denoised: Predicted clean sample ``x - v * t``, shape ``[B, T, C]``.
             t_curr: Current timestep in ``[0, 1]`` (flow-matching convention).
-                Used to modulate the scaler so that the correction is larger
-                at high noise levels and decays to zero at ``t = 0``.
+                Drives the per-band schedule (see class docstring).
 
         Returns:
             Corrected latent with the same shape and dtype as ``x_next``.
         """
         if not self.is_active:
             return x_next
-        s = float(t_curr) * self.scaler
-        hs = float(t_curr) * self.high_scaler
+        t = float(t_curr)
+        low_s = t * self.scaler
+        high_s = (1.0 - t) * self.scaler
+        double_high_s = (1.0 - t) * self.high_scaler
         if self.mode == "low":
-            return dcw_low(x_next, denoised, s, self.wavelet)
+            return dcw_low(x_next, denoised, low_s, self.wavelet)
         if self.mode == "high":
-            return dcw_high(x_next, denoised, s, self.wavelet)
+            return dcw_high(x_next, denoised, high_s, self.wavelet)
         if self.mode == "double":
-            return dcw_double(x_next, denoised, s, hs, self.wavelet)
+            return dcw_double(x_next, denoised, low_s, double_high_s, self.wavelet)
         if self.mode == "pix":
-            return dcw_pix(x_next, denoised, s)
+            return dcw_pix(x_next, denoised, self.scaler)
         raise RuntimeError(f"unreachable dcw_mode={self.mode}")

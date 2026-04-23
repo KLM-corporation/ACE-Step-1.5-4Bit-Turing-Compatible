@@ -2112,14 +2112,18 @@ class AceStepConditionGenerationModel(AceStepPreTrainedModel):
 
             # Cache pre-step latent so DCW can reconstruct the predicted
             # clean sample `denoised = x - v * t` after the sampler update.
+            # Also stash the raw velocity (pre-Heun-averaging) so the x0
+            # reconstruction uses the single-evaluation v(t_curr), matching
+            # the reference FLUX scheduler's `x0 = sample - sigma * v`.
             xt_before_step = xt
+            vt_for_denoise = vt
 
             # On final step, directly compute x0 from noise
             if step_idx == num_steps - 1:
                 xt = self.get_x0_from_noise(xt, vt, t_curr_tensor)
                 if dcw_corrector.is_active:
                     t_unsq = current_timestep * torch.ones((bsz,), device=device, dtype=dtype).unsqueeze(-1).unsqueeze(-1)
-                    denoised = xt_before_step - vt * t_unsq
+                    denoised = xt_before_step - vt_for_denoise * t_unsq
                     xt = dcw_corrector.apply(xt, denoised, current_timestep)
                 prev_vt = vt
                 break
@@ -2177,7 +2181,7 @@ class AceStepConditionGenerationModel(AceStepPreTrainedModel):
             # the predicted clean sample.  Scaler decays with t_curr.
             if dcw_corrector.is_active:
                 t_unsq = current_timestep * torch.ones((bsz,), device=device, dtype=dtype).unsqueeze(-1).unsqueeze(-1)
-                denoised = xt_before_step - vt * t_unsq
+                denoised = xt_before_step - vt_for_denoise * t_unsq
                 xt = dcw_corrector.apply(xt, denoised, current_timestep)
 
             prev_vt = vt

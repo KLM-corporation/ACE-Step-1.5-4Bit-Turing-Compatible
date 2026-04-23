@@ -109,6 +109,76 @@ def test_apply_mlx_dcw_pix_matches_formula(dcw_mlx):
     assert diff < 1e-6
 
 
+@pytest.mark.skipif(not HAS_MLX, reason="MLX not installed")
+def test_apply_mlx_dcw_pix_uses_raw_scaler_no_t_decay(dcw_mlx):
+    # Matches the PyTorch DCWCorrector: pix is raw-scaler, no t modulation.
+    import mlx.core as mx
+
+    x = mx.random.normal((1, 8, 2))
+    y = mx.random.normal((1, 8, 2))
+    ref = x + 0.25 * (x - y)
+    for t in (0.0, 0.3, 0.7, 1.0):
+        out = dcw_mlx.apply_mlx_dcw(
+            x, y, t_curr=t, enabled=True, mode="pix",
+            scaler=0.25, high_scaler=0.0, wavelet="haar",
+        )
+        assert mx.abs(out - ref).max().item() < 1e-6, f"pix drift at t={t}"
+
+
+@pytest.mark.skipif(not HAS_MLX, reason="MLX not installed")
+def test_apply_mlx_dcw_high_schedule_is_complementary(dcw_mlx):
+    # Paper Eq. 21: high-band uses (1 - t) * scaler, so:
+    #   t=1.0 → identity (high-freq emerges later; nothing to correct yet)
+    #   t=0.0 → full scaler
+    import mlx.core as mx
+
+    x = mx.random.normal((1, 8, 2))
+    y = mx.random.normal((1, 8, 2))
+    # At t=1.0: no correction.
+    out_one = dcw_mlx.apply_mlx_dcw(
+        x, y, t_curr=1.0, enabled=True, mode="high",
+        scaler=0.5, high_scaler=0.0, wavelet="haar",
+    )
+    assert mx.abs(out_one - x).max().item() < 1e-6
+
+    # At t=0.0: full correction — equivalent to a t_curr=1.0 call under the
+    # old (buggy) schedule for `low` mode, which is what we use here to
+    # generate the reference via the low-mode path (both paths apply the
+    # same `xH = xH + s*(xH - yH)` math; we construct the reference by
+    # hand).
+    T = x.shape[1]
+    xL, xH = dcw_mlx._haar_dwt_1d(x)
+    yL, yH = dcw_mlx._haar_dwt_1d(y)
+    xH_ref = xH + 0.5 * (xH - yH)
+    ref_zero = dcw_mlx._haar_idwt_1d(xL, xH_ref, T)
+    out_zero = dcw_mlx.apply_mlx_dcw(
+        x, y, t_curr=0.0, enabled=True, mode="high",
+        scaler=0.5, high_scaler=0.0, wavelet="haar",
+    )
+    assert mx.abs(out_zero - ref_zero).max().item() < 1e-5
+
+
+@pytest.mark.skipif(not HAS_MLX, reason="MLX not installed")
+def test_apply_mlx_dcw_double_schedule_complementary(dcw_mlx):
+    # double mode: low uses t*scaler, high uses (1-t)*high_scaler.
+    # At t=0.5, scaler=0.4, high_scaler=0.6 → low_s=0.2, high_s=0.3.
+    import mlx.core as mx
+
+    x = mx.random.normal((1, 8, 2))
+    y = mx.random.normal((1, 8, 2))
+    T = x.shape[1]
+    xL, xH = dcw_mlx._haar_dwt_1d(x)
+    yL, yH = dcw_mlx._haar_dwt_1d(y)
+    xL_ref = xL + 0.2 * (xL - yL)
+    xH_ref = xH + 0.3 * (xH - yH)
+    ref = dcw_mlx._haar_idwt_1d(xL_ref, xH_ref, T)
+    out = dcw_mlx.apply_mlx_dcw(
+        x, y, t_curr=0.5, enabled=True, mode="double",
+        scaler=0.4, high_scaler=0.6, wavelet="haar",
+    )
+    assert mx.abs(out - ref).max().item() < 1e-5
+
+
 HAS_PW = importlib.util.find_spec("pytorch_wavelets") is not None
 
 

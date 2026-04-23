@@ -384,7 +384,11 @@ def mlx_generate_diffusion(
 
         # Cache pre-step latent so DCW can reconstruct the predicted clean
         # sample ``denoised = x_before - v * t`` after the sampler update.
+        # Also stash the raw velocity (pre-Heun-averaging) so the x0
+        # reconstruction uses the single-evaluation ``v(t_curr)``, matching
+        # the reference FLUX scheduler's ``x0 = sample - sigma * v``.
         xt_before_step = xt
+        vt_for_denoise = vt
 
         # Final step: compute x0
         if step_idx == num_steps - 1:
@@ -431,7 +435,7 @@ def mlx_generate_diffusion(
         # identity at t=0 and strongest at t≈1.
         if dcw_active:
             t_unsq_d = mx.full((bsz, 1, 1), current_t)
-            denoised = xt_before_step - vt * t_unsq_d
+            denoised = xt_before_step - vt_for_denoise * t_unsq_d
             xt = apply_mlx_dcw(
                 xt, denoised, t_curr=current_t,
                 enabled=True,
