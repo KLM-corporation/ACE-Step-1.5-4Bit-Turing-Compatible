@@ -8,6 +8,7 @@ import torch
 from loguru import logger
 
 from acestep import gpu_config
+from acestep.core.generation.handler.windows_int4_linear import replace_with_windows_int4
 from .init_service_loader_components import InitServiceLoaderComponentsMixin
 
 
@@ -81,6 +82,9 @@ class InitServiceLoaderMixin(InitServiceLoaderComponentsMixin):
         if quantization == "int8_weight_only":
             from torchao.quantization import Int8WeightOnlyConfig
             return Int8WeightOnlyConfig()
+        if quantization == "int4_weight_only":
+            from torchao.quantization import Int4WeightOnlyConfig
+            return Int4WeightOnlyConfig()
         if quantization == "fp8_weight_only":
             from torchao.quantization import Float8WeightOnlyConfig
             return Float8WeightOnlyConfig()
@@ -93,10 +97,8 @@ class InitServiceLoaderMixin(InitServiceLoaderComponentsMixin):
         """Apply torchao quantization to DiT linear layers when requested."""
         if quantization is None:
             return
-        from torchao.quantization import quantize_
         from torchao.quantization.quant_api import _is_linear
 
-        quant_config = self._build_quantization_config(quantization)
         def _dit_filter_fn(module, fqn):
             """Keep only decoder-side DiT linear layers and exclude tokenizers."""
             if not _is_linear(module, fqn):
@@ -108,6 +110,14 @@ class InitServiceLoaderMixin(InitServiceLoaderComponentsMixin):
                 if part in ("tokenizer", "detokenizer"):
                     return False
             return True
+
+        if quantization == "int4_weight_only":
+            # Use custom Windows-stable 4-bit implementation
+            replace_with_windows_int4(self.model, filter_fn=_dit_filter_fn)
+            return
+
+        from torchao.quantization import quantize_
+        quant_config = self._build_quantization_config(quantization)
 
         quantize_(self.model, quant_config, filter_fn=_dit_filter_fn)
         logger.info(f"[initialize_service] DiT quantized with: {quantization}")
@@ -146,13 +156,12 @@ class InitServiceLoaderMixin(InitServiceLoaderComponentsMixin):
         elif device == "cuda" and not gpu_config.cuda_supports_bfloat16():
             # Pre-Ampere GPUs (compute capability < 8.0) run in float16 which
             # can overflow in SDPA's fused softmax with longer sequences,
-            # producing NaN/Inf latents (see issues #924, #927).  Eager
-            # attention upcasts to float32 for softmax, avoiding the overflow.
+            # producing NaN/Inf latents (see issues #924, #927).
+            attn_implementation = "sdpa"
             logger.info(
-                "[initialize_service] Pre-Ampere CUDA detected: using eager "
-                "attention for float16 numerical stability."
+                "[initialize_service] Pre-Ampere CUDA detected: FORCING SDPA "
+                "attention with float32 stability patch."
             )
-            attn_implementation = "eager"
         else:
             if use_flash_attention:
                 logger.warning(
@@ -176,7 +185,7 @@ class InitServiceLoaderMixin(InitServiceLoaderComponentsMixin):
                     model_checkpoint_path,
                     trust_remote_code=True,
                     attn_implementation=candidate,
-                    dtype=self.dtype,
+                    torch_dtype=self.dtype,
                 )
                 attn_implementation = candidate
                 break
@@ -203,10 +212,12 @@ class InitServiceLoaderMixin(InitServiceLoaderComponentsMixin):
             self.model = self.model.to("cpu").to(self.dtype)
         self.model.eval()
 
+        # Apply quantization BEFORE compilation to allow inductor to optimize quantized ops
+        self._apply_dit_quantization(quantization)
+
         if compile_model:
             self._ensure_len_for_compile(self.model, "model")
             self.model = torch.compile(self.model)
-        self._apply_dit_quantization(quantization)
 
         silence_latent_path = os.path.join(model_checkpoint_path, "silence_latent.pt")
         if not os.path.exists(silence_latent_path):

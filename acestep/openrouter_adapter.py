@@ -43,7 +43,7 @@ MODEL_PREFIX = "acestep"
 DEFAULT_AUDIO_FORMAT = "mp3"
 
 # Generation timeout for non-streaming requests (seconds)
-GENERATION_TIMEOUT = int(os.environ.get("ACESTEP_GENERATION_TIMEOUT", "600"))
+GENERATION_TIMEOUT = int(os.environ.get("ACESTEP_GENERATION_TIMEOUT", "36000"))
 
 
 # =============================================================================

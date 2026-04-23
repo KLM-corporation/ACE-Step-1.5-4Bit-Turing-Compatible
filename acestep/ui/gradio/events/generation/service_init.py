@@ -24,8 +24,16 @@ def _select_quantization_value(
     device: str,
 ) -> str | None:
     """Return the DiT quantization mode selected for the current UI state."""
-    quant_value = "int8_weight_only" if quantization_enabled else None
-    if not quantization_enabled or device not in {"auto", "cuda"}:
+    if not quantization_enabled:
+        return None
+
+    # Allow overriding the default "int8_weight_only" via environment variable.
+    # This allows advanced users to try "int4_weight_only" or "fp8_weight_only"
+    # without UI changes.
+    quant_mode = os.environ.get("ACESTEP_QUANTIZATION_MODE", "int8_weight_only")
+    quant_value = quant_mode
+
+    if device not in {"auto", "cuda"}:
         return quant_value
 
     try:

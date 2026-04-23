@@ -1,5 +1,6 @@
 """Toggle and init controls for generation service configuration."""
 
+import os
 from typing import Any
 
 import gradio as gr
@@ -90,10 +91,17 @@ def build_service_toggles(
             info=t("service.compile_model_info"),
             elem_classes=["has-info-container"],
         )
+        quant_mode = os.environ.get("ACESTEP_QUANTIZATION_MODE", "int8_weight_only")
+        quant_label = t("service.quantization_label")
+        quant_info = t("service.quantization_info")
+        if quant_mode == "int4_weight_only":
+            quant_label = quant_label.replace("INT8", "INT4").replace("8-bit", "4-bit")
+            quant_info = quant_info.replace("8-bit", "4-bit")
+
         quantization_checkbox = gr.Checkbox(
-            label=t("service.quantization_label"),
+            label=quant_label,
             value=params.get("quantization", default_quantization) if service_pre_initialized else default_quantization,
-            info=t("service.quantization_info")
+            info=quant_info
             + (" (recommended for this tier)" if default_quantization else " (optional for this tier)"),
             elem_classes=["has-info-container"],
         )

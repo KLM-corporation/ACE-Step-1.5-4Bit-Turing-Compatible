@@ -390,16 +390,19 @@ def main():
 
     args = parser.parse_args()
 
+    # Load config from .env if not specified (shared logic for API and UI)
+    if args.config_path is None:
+        args.config_path = os.environ.get("ACESTEP_CONFIG_PATH")
+    if args.lm_model_path is None:
+        args.lm_model_path = os.environ.get("ACESTEP_LM_MODEL_PATH")
+    if os.environ.get("ACESTEP_LM_BACKEND"):
+        args.backend = os.environ.get("ACESTEP_LM_BACKEND")
+    if os.environ.get("ACESTEP_QUANTIZATION_MODE"):
+        args.quantization = parse_quantization_arg(os.environ.get("ACESTEP_QUANTIZATION_MODE"))
+
     # Enable API requires init_service
     if args.enable_api:
         args.init_service = True
-        # Load config from .env if not specified
-        if args.config_path is None:
-            args.config_path = os.environ.get("ACESTEP_CONFIG_PATH")
-        if args.lm_model_path is None:
-            args.lm_model_path = os.environ.get("ACESTEP_LM_MODEL_PATH")
-        if os.environ.get("ACESTEP_LM_BACKEND"):
-            args.backend = os.environ.get("ACESTEP_LM_BACKEND")
 
     # Service mode defaults (can be configured via .env file)
     if args.service_mode:

@@ -19,6 +19,11 @@
     </a>
 </p>
 
+> [!IMPORTANT]
+> **🚀 Fork Optimization** : Ce fork est optimisé pour faire tourner **ACE-Step 1.5 XL (4B)** sur du matériel grand public (ex: **RTX 2080 Ti 11GB**). 
+> Consultez notre **[Guide d'Optimisation Technique](./DOCS_2080TI_OPTIMIZATION.md)** pour les détails sur la quantification INT4 custom et la stabilité numérique.
+
+
 ## 📰 News
 
 > 🎵 **Want a faster & more stable experience? Try [acemusic.ai](https://acemusic.ai) — 100% free!**

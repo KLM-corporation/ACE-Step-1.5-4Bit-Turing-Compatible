@@ -88,13 +88,22 @@ class InitServiceOrchestratorMixin:
                     "(set ACESTEP_ROCM_DTYPE=bfloat16 or float16 to override)"
                 )
             elif resolved_device == "cuda":
-                if gpu_config.cuda_supports_bfloat16():
+                env_dtype = os.environ.get("ACESTEP_DTYPE", "").strip().lower()
+                if env_dtype == "float32":
+                    self.dtype = torch.float32
+                    logger.info("[initialize_service] ACESTEP_DTYPE=float32 detected: using float32 for maximum stability.")
+                elif env_dtype == "float16":
+                    self.dtype = torch.float16
+                elif env_dtype == "bfloat16":
+                    self.dtype = torch.bfloat16
+                elif gpu_config.cuda_supports_bfloat16():
                     self.dtype = torch.bfloat16
                 else:
                     self.dtype = torch.float16
                     logger.info(
                         "[initialize_service] Pre-Ampere CUDA detected: "
-                        "using float16 instead of bfloat16."
+                        "using float16 instead of bfloat16. "
+                        "(Set ACESTEP_DTYPE=float32 in .env if you get NaNs)"
                     )
             else:
                 self.dtype = torch.bfloat16 if resolved_device == "xpu" else torch.float32
